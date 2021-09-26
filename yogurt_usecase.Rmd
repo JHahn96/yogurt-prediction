@@ -1,0 +1,295 @@
+---
+title: "Data Science in Healthcare"
+author: "Natalie Borter, Pascal Humbel, Jonathan Hahn"
+date: "18.01.2021"
+output: html_document;
+        pdf_document
+params:
+  wd: !r getwd()
+---
+
+```{r setup, include=True, cache=TRUE}
+# Setting working directory to the directory of the file
+knitr::opts_knit$set(root.dir = getwd())
+source("collecting_data.R")
+## executing data preparation with function load_dada_frame() defined in collecting_data.R
+
+# union of all yogurts
+df<-load.data.frame()
+
+# list of all yogurts 
+dfs<-load.data.frames()
+
+
+head(df)
+```
+
+###Describe the dependent variable: waiting times and some of the key predictors
+
+
+```{r boxplots, warning=FALSE, message=FALSE}
+ggplot(df, aes(x=yrwk_start, y=sales)) + 
+    geom_line(aes(colour=article_name, group=article_name)) + # colour, group both depend on cond2
+    geom_point(aes(colour=article_name),               # colour depends on cond2
+               size=1)                          # larger points, different shape
+
+```
+### Prepare the data for analysis
+
+```{r prepare_data, warning=FALSE, message=FALSE}
+library(tidyverse)
+df_final<-dfs[[1]]
+
+
+# TODO: load swiss hollydays
+# Holydays for Prophet
+
+#hG_factoreneva <- read.csv2(file = 'Data/fcal_Geneve_2019.csv', sep = ';')
+#hG_factoreneva[,"Date"]<-as.Date(hG_factoreneva$Datum,format="%d.%m.%Y" )
+#hG_factoreneva$Wochentag<-NULL
+#hG_factoreneva$Kalenderwoche<-NULL
+#hG_factoreneva$X<-NULL
+#hG_factoreneva$Datum<-NULL
+
+# create lockdown
+ld_start = as.Date("08.04.2020", format="%d.%m.%Y")
+ld_end = as.Date("26.04.2020", format="%d.%m.%Y")
+ld<-data.frame("Date" = seq(ld_start,ld_end, by = 'days'), row.names = )
+ld[,"Bezeichnung"]<-"Lockdown"
+
+#events<-rbind(ld, hG_factoreneva)
+events <- ld
+
+h<-data_frame(
+  holiday = events[,"Bezeichnung"],
+  ds = as.Date(events[,"Date"]),
+  lower_window = 0,
+  upper_window = 1
+)
+
+# refactor columns for prophet package
+A<-df_final[,c("yrwk_start", "sales")]
+names(A)<-c("ds","y")
+```
+
+### Compare different models
+For comparison of the models
+https://www.otexts.org/fpp/2/5
+
+
+```{r rmse_function}
+##define two functions to assess model fit
+
+## rmse = root mean squared error
+rmse<-function(actual, predicted){
+  round((sum((actual-predicted)^2)/length(actual))^.5,2)
+}
+## mean absolute percentage error
+mape<-function(actual, predicted){
+  round(mean(100*abs((actual-predicted)/actual)),2)
+}
+```
+
+Partition the data into train and test
+```{r prepare_data_for_prophet}
+AL<-df_final[,c("yrwk_start", 
+                "sales",
+                "year", 
+                "month", 
+                "week", 
+                "promo_01", 
+                "promo_02", 
+                "promo_03", 
+                "promo_04", 
+                "promo_05")]
+names(AL)<-c("ds",
+             "y",
+             "year",
+             "month",
+             "week",
+             "promo_01",
+             "promo_02",
+             "promo_03",
+             "promo_04",
+             "promo_05")
+
+## the test set is the last 4 weeks measured, the training set is everithing else
+ntest <- 4 # measurements weeks
+len <- nrow(AL)
+training<-AL[1:(len-ntest),]
+testing<-AL[(len-ntest+1):len,]
+
+c(min(training$ds), max(training$ds))
+c(min(testing$ds), max(testing$ds))
+```
+
+## Median: as more as 50% of the waiting times are 5 minutes (Median), a model predicting always the median is used for comparison
+```{r fitting_mean, warning=FALSE, message=FALSE}
+training$pred_median <-median(training$y)
+testing$pred_median <-median(training$y)
+
+
+c(rmse(training$y, training$pred_median),rmse(testing$y, testing$pred_median))
+c(mape(training$y, training$pred_median),mape(testing$y, testing$pred_median))
+```
+
+
+
+## GAM: As second model to compare with, a generalized additive model with smoothness estimation is used (GAM). 
+```{r fitting_gam, warning=FALSE, message=FALSE}
+library(gam)
+
+fit_gam<-gam(y~ds+ 
+               week + 
+               month +
+               year +
+               promo_01+
+#               promo_02+
+               promo_03+
+               promo_04
+#               promo_05
+             ,data=training)
+
+training$pred_gam <-predict(fit_gam)
+testing$pred_gam <-predict(fit_gam, newdata = testing)
+
+c(rmse(training$y, training$pred_gam),rmse(testing$y, testing$pred_gam))
+c(mape(training$y, training$pred_gam),mape(testing$y, testing$pred_gam))
+```
+
+
+## Prophet: As third model prophet ist used, first only with holidays added
+```{r install_library, warning=FALSE, message=FALSE}
+library(prophet)
+```
+```{r prophet_with_holyday_model, cache=TRUE}
+m <- prophet(holidays=h, mcmc_samples=300, 
+             holidays_prior_scale=0.5, 
+             changepoint_prior_scale=0.01, 
+             yearly.seasonality=TRUE,
+             weekly.seasonality=TRUE, 
+             daily.seasonality=TRUE)
+m <- add_country_holidays(m, country_name = 'CH')
+m <- fit.prophet(m, training)
+```
+
+Do a forecast for the model with holidays
+```{r prophet_with_holydays_prediction, cache=TRUE}
+
+future <- make_future_dataframe(m, periods = ntest, freq = 60 *60, include_history = TRUE)
+
+fcst <- predict(m, future)
+```
+
+First visual inspection
+```{r prophet_with_holydays_visual, cache=TRUE}
+plot(m, fcst) + add_changepoints_to_plot(m)
+prophet_plot_components(m,fcst)
+```
+
+Check the accuracy of the models
+```{r prophet_with_holydays_prediction_accuracy}
+n<-nrow(training)
+
+training$yhat<-fcst$yhat[1:n]
+testing$yhat<-fcst$yhat[(n+1):(n+ntest)]
+
+a<-training$yhat<5
+training$yhat[a]<-5
+
+b<-testing$yhat<5
+testing$yhat[b]<-5
+
+c(rmse(training$y, training$yhat),rmse(testing$y, testing$yhat))
+c(mape(training$y, training$yhat),mape(testing$y, testing$yhat))
+```
+
+
+### Second Prophet Model, this time with both, regressors and holidays
+
+
+```{r prophet_with_holydays_model, cache=TRUE}
+m_h_r <- prophet(holidays=h, mcmc_samples=300, 
+             holidays_prior_scale=0.5, 
+             changepoint_prior_scale=0.01, 
+             #seasonality_mode='multiplicative', 
+             yearly_seasonality=TRUE, 
+             weekly_seasonality=TRUE, 
+             daily_seasonality=TRUE)
+
+#m_h_r <- add_regressor(m_h_r, 'avgTemp')
+#m_h_r <- add_regressor(m_h_r, "COVID_CH_DIFF")
+m_h_r <- fit.prophet(m_h_r, training)
+```
+
+do a forecast for the model with holydays and regressors
+```{r prophet_with_holydays_and_regressors_prediction, cache=TRUE}
+future <- make_future_dataframe(m_h_r, periods = ntest, freq = 60 *60, include_history = TRUE)
+
+#future$avgTemp<- AL[,c("avgTemp")]
+#future$COVID_CH_DIFF<- AL[,c("COVID_CH_DIFF")]
+
+fcst_h_r <- predict(m_h_r, future)
+```
+
+First visual inspection
+```{r prophet_with_holydays_and_regressors_visual}
+plot(m_h_r, fcst_h_r) + add_changepoints_to_plot(m_h_r)
+p <- prophet_plot_components(m_h_r,fcst_h_r, render_plot = TRUE)
+```
+
+Check the accuracy of the model
+```{r prophet_with_holydays_and_regressors_prediction_accuracy}
+n<-nrow(training)
+
+training$yhat_h_r<-fcst_h_r$yhat[1:n]
+testing$yhat_h_r<-fcst_h_r$yhat[(n+1):(n+ntest)]
+
+a<-training$yhat_h_r<5
+training$yhat_h_r[a]<-5
+
+b<-testing$yhat_h_r<5
+testing$yhat_h_r[b]<-5
+
+c(rmse(training$y, training$yhat_h_r),rmse(testing$y, testing$yhat_h_r))
+c(mape(training$y, training$yhat_h_r),mape(testing$y, testing$yhat_h_r))
+```
+```{r rename_predictions_for_plot}
+training<-training %>% rename(pred_prophet = yhat, pred_prophet_regressors = yhat_h_r )
+testing<-testing %>% rename(pred_prophet = yhat, pred_prophet_regressors = yhat_h_r )
+```
+Plot the four models against eachother and add RMSE and MAPE
+```{r plot_and_compare_models, warning=FALSE ,message=FALSE}
+testqstat<- data.table::melt(testing, id="ds", measure=c("pred_prophet", 
+                                                         "pred_prophet_regressors", 
+                                                         "pred_gam", "pred_median"))
+
+model_names<- c(
+  'pred_prophet' = sprintf("Prophet Holydays \n RMSE: %.2f (Train) - %.2f (Test)",
+                   rmse(training$y, training$pred_prophet),rmse(testing$y, testing$pred_prophet)),
+  
+  'pred_prophet_regressors' = sprintf(
+    "Prophet Holydays + Corona Cases + Temperature \n RMSE: %.2f (Train) - %.2f (Test)",
+                   rmse(training$y, training$pred_prophet_regressors),
+                    rmse(testing$y, testing$pred_prophet_regressors)),
+  
+  'pred_gam' = sprintf("GAM \n  RMSE: %.2f (Train) - %.2f (Test)",
+                   rmse(training$y, training$pred_gam),rmse(testing$y, testing$pred_gam)),  
+  
+  'pred_median' = sprintf("Median \n RMSE: %.2f (Train) - %.2f (Test)",
+                   rmse(training$y, training$pred_median),rmse(testing$y, testing$pred_median))
+)
+
+
+g1 <- ggplot(aes(y=value, x=ds, color=variable), data=testqstat) +
+  
+  xlim(min(testing$ds), max(testing$ds))+
+  geom_line(data = testing, aes(y=y), color="grey70") +
+  geom_line() +
+  facet_wrap(~variable, ncol=2, labeller = as_labeller(model_names))+
+  theme(axis.text = element_text(size=5), axis.title = element_text(size=6)) +
+  labs(title="Modelcomparison, Test Data, with rmse and mape Statistics.", 
+       x="Time", y="WaitingTime in min")+ 
+  theme(legend.position = "none")
+g1
+```
