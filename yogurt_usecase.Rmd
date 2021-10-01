@@ -14,15 +14,18 @@ knitr::opts_knit$set(root.dir = getwd())
 source("collecting_data.R")
 ## executing data preparation with function load_dada_frame() defined in collecting_data.R
 
+# Natalie & hits
+
+# define the keywords for google trend analysis
+keyword.vec<-c("Joghurt", "Abnehmen")
+
 # union of all yogurts
-df<-load.data.frame()
+df<-load.data.frame(keyword.vec)
 
 # list of all yogurts 
-dfs<-load.data.frames()
+dfs<-load.data.frames(keyword.vec)
 
 dfs
-
-head(df)
 ```
 
 ###Describe the dependent variable: waiting times and some of the key predictors
@@ -102,7 +105,9 @@ AL<-df_final[,c("yrwk_start",
                 "promo_02", 
                 "promo_03", 
                 "promo_04", 
-                "promo_05")]
+                "promo_05",
+                "Joghurt",
+                "Abnehmen")]
 names(AL)<-c("ds",
              "y",
              "year",
@@ -112,10 +117,12 @@ names(AL)<-c("ds",
              "promo_02",
              "promo_03",
              "promo_04",
-             "promo_05")
+             "promo_05",
+             "Joghurt",
+             "Abnehmen")
 
 ## the test set is the last 4 weeks measured, the training set is everithing else
-ntest <- 4 # measurements weeks
+ntest <- 12 # measurements weeks
 len <- nrow(AL)
 training<-AL[1:(len-ntest),]
 testing<-AL[(len-ntest+1):len,]
@@ -126,6 +133,7 @@ c(min(testing$ds), max(testing$ds))
 
 ## Median: as more as 50% of the waiting times are 5 minutes (Median), a model predicting always the median is used for comparison
 ```{r fitting_mean, warning=FALSE, message=FALSE}
+
 training$pred_median <-median(training$y)
 testing$pred_median <-median(training$y)
 
@@ -147,8 +155,10 @@ fit_gam<-gam(y~ds+
                promo_01+
 #               promo_02+
                promo_03+
-               promo_04
+               promo_04+
 #               promo_05
+               Joghurt+
+               Abnehmen
              ,data=training)
 
 training$pred_gam <-predict(fit_gam)
@@ -195,12 +205,6 @@ n<-nrow(training)
 training$yhat<-fcst$yhat[1:n]
 testing$yhat<-fcst$yhat[(n+1):(n+ntest)]
 
-a<-training$yhat<5
-training$yhat[a]<-5
-
-b<-testing$yhat<5
-testing$yhat[b]<-5
-
 c(rmse(training$y, training$yhat),rmse(testing$y, testing$yhat))
 c(mape(training$y, training$yhat),mape(testing$y, testing$yhat))
 ```
@@ -214,12 +218,18 @@ m_h_r <- prophet(holidays=h, mcmc_samples=300,
              holidays_prior_scale=0.5, 
              changepoint_prior_scale=0.01, 
              #seasonality_mode='multiplicative', 
-             yearly_seasonality=TRUE, 
-             weekly_seasonality=TRUE, 
-             daily_seasonality=TRUE)
+             yearly.seasonality=TRUE, 
+             weekly.seasonality=TRUE, 
+             daily.seasonality=FALSE)
 
-#m_h_r <- add_regressor(m_h_r, 'avgTemp')
-#m_h_r <- add_regressor(m_h_r, "COVID_CH_DIFF")
+
+m_h_r <- add_regressor(m_h_r, 'promo_01')
+m_h_r <- add_regressor(m_h_r, "promo_02")
+m_h_r <- add_regressor(m_h_r, 'promo_03')
+m_h_r <- add_regressor(m_h_r, "promo_04")
+m_h_r <- add_regressor(m_h_r, 'promo_05')
+m_h_r <- add_regressor(m_h_r, "Joghurt")
+m_h_r <- add_regressor(m_h_r, "Abnehmen")
 m_h_r <- fit.prophet(m_h_r, training)
 ```
 
@@ -227,8 +237,13 @@ do a forecast for the model with holydays and regressors
 ```{r prophet_with_holydays_and_regressors_prediction, cache=TRUE}
 future <- make_future_dataframe(m_h_r, periods = ntest, freq = 60 *60, include_history = TRUE)
 
-#future$avgTemp<- AL[,c("avgTemp")]
-#future$COVID_CH_DIFF<- AL[,c("COVID_CH_DIFF")]
+future$promo_01<- AL[,c("promo_01")]
+future$promo_02<- AL[,c("promo_02")]
+future$promo_03<- AL[,c("promo_03")]
+future$promo_04<- AL[,c("promo_04")]
+future$promo_05<- AL[,c("promo_05")]
+future$Joghurt<- AL[,c("Joghurt")]
+future$Abnehmen<- AL[,c("Abnehmen")]
 
 fcst_h_r <- predict(m_h_r, future)
 ```
@@ -263,14 +278,15 @@ Plot the four models against eachother and add RMSE and MAPE
 ```{r plot_and_compare_models, warning=FALSE ,message=FALSE}
 testqstat<- data.table::melt(testing, id="ds", measure=c("pred_prophet", 
                                                          "pred_prophet_regressors", 
-                                                         "pred_gam", "pred_median"))
+                                                         "pred_gam", 
+                                                         "pred_median"))
 
 model_names<- c(
   'pred_prophet' = sprintf("Prophet Holydays \n RMSE: %.2f (Train) - %.2f (Test)",
                    rmse(training$y, training$pred_prophet),rmse(testing$y, testing$pred_prophet)),
   
   'pred_prophet_regressors' = sprintf(
-    "Prophet Holydays + Corona Cases + Temperature \n RMSE: %.2f (Train) - %.2f (Test)",
+    "Prophet with Regressors \n RMSE: %.2f (Train) - %.2f (Test)",
                    rmse(training$y, training$pred_prophet_regressors),
                     rmse(testing$y, testing$pred_prophet_regressors)),
   
