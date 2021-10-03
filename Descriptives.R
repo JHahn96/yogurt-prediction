@@ -47,21 +47,26 @@ colnames(Tot)<-c("A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P"
 library(psych)
 fa(Tot)
 
-fa.parallel(Tot)
-fa(Tot,nfactors=4)
-
 Tot<-Tot/1000
 
-library(lavaan)
-#8,9,10,11,12,14,15,16 ###???7
-#I,J,
-dreifaktor_SOI_gesamt <- '
-Jog1 =~ G+H+I+J+K+L+N+O+P
-Jog2  =~ D+E+F
-Jog3 =~ A+B+C+R+S
-Jog4=~ M+Q
-'
-fit.dreidim_SOI_gesamt = cfa(dreifaktor_SOI_gesamt, data=Tot,estimator = "mlm")  
-summary(fit.dreidim_SOI_gesamt, fit.measures=TRUE, standardized=TRUE)
+fa.parallel(Tot)
+Faktoren<-fa(Tot,nfactors=2)
+Werte<-Faktoren$scores
+MClassi<-Werte[,1]
+Rest<-Werte[,2]
 
+
+
+#plot(MClassi)
+#plot(Rest)
+#plot(A$sales)
+#plot(B$sales)
+#plot(C$sales)
+#plot(D$sales)
+#plot(E$sales)
+#plot(FF$sales)
+#plot(G$sales)
+#plot(H$sales)
+#plot(I$sales)
+#plot(J$sales)
 

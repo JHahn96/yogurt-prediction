@@ -13,11 +13,14 @@ params:
 knitr::opts_knit$set(root.dir = getwd())
 source("collecting_data.R")
 ## executing data preparation with function load_dada_frame() defined in collecting_data.R
+## Kannst du mir überall noch die Variablen MClassi und Rest einbinden? Ich mache sie mit ##Descriptives. Es handelt sich um eine Zusammenfassung der Daten, mal schauen ob sich das besser vorhersagen lässt???
 
-# Natalie & hits
+##source("Deskriptives.R")
+
+
 
 # define the keywords for google trend analysis
-keyword.vec<-c("Joghurt", "Abnehmen")
+keyword.vec<-c("Joghurt", "gesund essen")
 
 # union of all yogurts
 df<-load.data.frame(keyword.vec)
@@ -25,7 +28,33 @@ df<-load.data.frame(keyword.vec)
 # list of all yogurts 
 dfs<-load.data.frames(keyword.vec)
 
-dfs
+gesund<-dfs[[1]]$gesund.essen
+Joghurt<-dfs[[1]]$Joghurt
+
+#nur jeden vierten Eintrag auswählen
+gesund<-gesund[seq(1,length(gesund),4)]
+Joghurt<-Joghurt[seq(1,length(Joghurt),4)]
+
+
+ntest <- 12 # measurements months, wollen wir hier wirklich nur 3 Monate?
+len <- length(gesund)
+trainingg<-gesund[c(1:(len-ntest))]
+testingg<-gesund[c((len-ntest+1):len)]
+
+trainingJ<-Joghurt[c(1:(len-ntest))]
+testingJ<-Joghurt[c((len-ntest+1):len)]
+
+auto.arima(trainingg, ic = "aic") #nichts
+auto.arima(trainingJ, ic = "aic") #1/1/1
+
+Jog<-arima(x=trainingJ,order=c(1,1,1))
+force.pred <- predict(Jog, n.ahead = 12)
+
+force.pred
+testingJ
+
+
+
 ```
 
 ###Describe the dependent variable: waiting times and some of the key predictors
@@ -107,7 +136,7 @@ AL<-df_final[,c("yrwk_start",
                 "promo_04", 
                 "promo_05",
                 "Joghurt",
-                "Abnehmen")]
+                "gesund.essen")]
 names(AL)<-c("ds",
              "y",
              "year",
@@ -119,10 +148,10 @@ names(AL)<-c("ds",
              "promo_04",
              "promo_05",
              "Joghurt",
-             "Abnehmen")
+             "gesund.essen")
 
 ## the test set is the last 4 weeks measured, the training set is everithing else
-ntest <- 12 # measurements weeks
+ntest <- 12 # measurements weeks ntest definiere ich weiter oben
 len <- nrow(AL)
 training<-AL[1:(len-ntest),]
 testing<-AL[(len-ntest+1):len,]
@@ -133,9 +162,18 @@ c(min(testing$ds), max(testing$ds))
 
 ## Median: as more as 50% of the waiting times are 5 minutes (Median), a model predicting always the median is used for comparison
 ```{r fitting_mean, warning=FALSE, message=FALSE}
+###hier kommt ihr Regressionsmodell rein
 
-training$pred_median <-median(training$y)
-testing$pred_median <-median(training$y)
+# Create simple Linear Regression Model
+##lm.mod1 <- lm(logSales ~ week + month + promo_01, data = train[logSales > 0])
+##sollen wir auch logarithmieren?
+mod<-lm(y~as.numeric(week)+as.numeric(month)+as.numeric(promo_01),data=training)
+
+testingA<-mod$coefficients[1]+mod$coefficients[2]*as.numeric(testing$week)+mod$coefficients[3]*as.numeric(testing$month)+mod$coefficients[4]*as.numeric(testing$promo_01)
+
+
+training$pred_median <-mod$fitted.values
+testing$pred_median <-testingA
 
 
 c(rmse(training$y, training$pred_median),rmse(testing$y, testing$pred_median))
@@ -158,7 +196,7 @@ fit_gam<-gam(y~ds+
                promo_04+
 #               promo_05
                Joghurt+
-               Abnehmen
+               gesund.essen
              ,data=training)
 
 training$pred_gam <-predict(fit_gam)
@@ -229,7 +267,7 @@ m_h_r <- add_regressor(m_h_r, 'promo_03')
 m_h_r <- add_regressor(m_h_r, "promo_04")
 m_h_r <- add_regressor(m_h_r, 'promo_05')
 m_h_r <- add_regressor(m_h_r, "Joghurt")
-m_h_r <- add_regressor(m_h_r, "Abnehmen")
+m_h_r <- add_regressor(m_h_r, "gesund.essen")
 m_h_r <- fit.prophet(m_h_r, training)
 ```
 
@@ -243,7 +281,7 @@ future$promo_03<- AL[,c("promo_03")]
 future$promo_04<- AL[,c("promo_04")]
 future$promo_05<- AL[,c("promo_05")]
 future$Joghurt<- AL[,c("Joghurt")]
-future$Abnehmen<- AL[,c("Abnehmen")]
+future$gesund.essen<- AL[,c("gesund.essen")]
 
 fcst_h_r <- predict(m_h_r, future)
 ```
