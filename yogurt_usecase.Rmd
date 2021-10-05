@@ -43,7 +43,7 @@ testingg<-gesund[c((len-ntest+1):len)]
 
 trainingJ<-Joghurt[c(1:(len-ntest))]
 testingJ<-Joghurt[c((len-ntest+1):len)]
-
+library(forecast)
 auto.arima(trainingg, ic = "aic") #nichts
 auto.arima(trainingJ, ic = "aic") #1/1/1
 
@@ -52,9 +52,6 @@ force.pred <- predict(Jog, n.ahead = 12)
 
 force.pred
 testingJ
-
-
-
 ```
 
 ###Describe the dependent variable: waiting times and some of the key predictors

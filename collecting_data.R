@@ -36,6 +36,8 @@ load.data.frame<-function(keyword.vec){
   # add milk prices
   df.cat<-merge(x = df.cat, y = read.milk.data(), by.y = "date", by.x = "date.month" ,  all.x = TRUE)
   
+  # add Mclassi factor and Rest factor
+  df.cat<-calc_mclassi_rest(df.cat, df.cat)
   
   return (df.cat)
 }
@@ -46,6 +48,8 @@ load.data.frames<-function(keyword.vec){
   ldf <- lapply(filenames, read.csv)
   ldf <- lapply(ldf, convert.to.correct.data.types)
   as.data.frame(ldf[1])
+  
+  df<- load.data.frame(keyword.vec)
   
   # get google trend for all keywords
   for (keyword in keyword.vec) {
@@ -58,6 +62,9 @@ load.data.frames<-function(keyword.vec){
       
       # add milk prices
       ldf[[i]] <-merge(x = ldf[i], y = read.milk.data(), by.y = "date", by.x = "date.month" ,  all.x = TRUE)
+      
+      # add Mclassi factor and Rest factor
+      ldf[[i]]<-calc_mclassi_rest(ldf[i], df)
     }
   }
   #ldf<-get.google.trend(keyword, as.data.frame(ldf[1]))
@@ -130,6 +137,73 @@ read.milk.data<-function(){
     mutate (date = as.Date(paste("01",paste(month, year, sep="."),sep="."), format="%d.%m.%Y"))%>%
     select(-month,-year,-datum)
   return(milk)
+}
+
+
+
+calc_mclassi_rest<-function(df_yogurt, df_all){
+  Namen<-names(table(df_all$article_name))
+  #split dataframe based on variabe
+  
+  a<-df_all$article_name==Namen[1]
+  b<-df_all$article_name==Namen[2]
+  c<-df_all$article_name==Namen[3]
+  d<-df_all$article_name==Namen[4]
+  e<-df_all$article_name==Namen[5]
+  f<-df_all$article_name==Namen[6]
+  g<-df_all$article_name==Namen[7]
+  h<-df_all$article_name==Namen[8]
+  i<-df_all$article_name==Namen[9]
+  j<-df_all$article_name==Namen[10]
+  k<-df_all$article_name==Namen[11]
+  l<-df_all$article_name==Namen[12]
+  m<-df_all$article_name==Namen[13]
+  n<-df_all$article_name==Namen[14]
+  o<-df_all$article_name==Namen[15]
+  p<-df_all$article_name==Namen[16]
+  q<-df_all$article_name==Namen[17]
+  r<-df_all$article_name==Namen[18]
+  s<-df_all$article_name==Namen[19]
+  
+  A<-df_all[a,]
+  B<-df_all[b,]
+  C<-df_all[c,]
+  D<-df_all[d,]
+  E<-df_all[e,]
+  FF<-df_all[f,]
+  G<-df_all[g,]
+  H<-df_all[h,]
+  I<-df_all[i,]
+  J<-df_all[j,]
+  K<-df_all[k,]
+  L<-df_all[l,]
+  M<-df_all[m,]
+  N<-df_all[n,]
+  O<-df_all[o,]
+  P<-df_all[p,]
+  Q<-df_all[q,]
+  R<-df_all[r,]
+  S<-df_all[s,]
+  
+  Tot<-cbind.data.frame(A$sales,B$sales,C$sales,D$sales,E$sales,FF$sales,G$sales,H$sales,I$sales,J$sales,K$sales,L$sales,M$sales,N$sales,O$sales,P$sales,Q$sales,R$sales,S$sales)
+  colnames(Tot)<-c("A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S")
+  
+  #install.packages("GPArotation")
+  library(psych)
+  
+  Tot<-Tot/1000
+  
+  Faktoren<-fa(Tot,nfactors=2)
+  Werte<-Faktoren$scores
+  MClassi<-Werte[,1]
+  Rest<-Werte[,2]
+  
+  Tot<-cbind.data.frame(A$yrwk_start,MClassi)
+  Tot<-cbind.data.frame(Tot,Rest)
+  colnames(Tot)<-c("date", "MClassi", "Rest")
+  
+  df <- merge(x = df_yogurt, y = Tot, by.y = "date", by.x = "yrwk_start",  all.x = TRUE)
+  return(df)
 }
 
 ###############################################################################
