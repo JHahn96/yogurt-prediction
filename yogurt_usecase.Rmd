@@ -178,8 +178,150 @@ c(mape(training$y, training$pred_median),mape(testing$y, testing$pred_median))
 ```
 
 
+## Show data types training
+```{r fitting_glm, echo=TRUE, message=TRUE, warning=TRUE}
+str(training)
+```
 
-## GAM: As second model to compare with, a generalized additive model with smoothness estimation is used (GAM). 
+
+## GLM: As second model to compare with, a generalized linear model with smoothness estimation is used (GLM). 
+```{r fitting_glm, warning=FALSE, message=FALSE}
+fit_glm<-glm(y~ds+ 
+               week + 
+               month +
+               year +
+               promo_01+
+#               promo_02+
+               promo_03+
+               promo_04+
+#               promo_05
+               Joghurt+
+               gesund.essen,
+               data=training)
+
+training$pred_glm <-predict(fit_glm)
+testing$pred_glm <-predict(fit_glm, newdata = testing)
+
+c(rmse(training$y, training$pred_glm),rmse(testing$y, testing$pred_glm))
+c(mape(training$y, training$pred_glm),mape(testing$y, testing$pred_glm))
+```
+
+
+## GLM -> add poison. 
+```{r fitting_glm, warning=FALSE, message=FALSE}
+fit_glm<-glm(y~ds+ 
+               week + 
+               month +
+               year +
+               promo_01+
+#               promo_02+
+               promo_03+
+               promo_04+
+#               promo_05
+               Joghurt+
+               gesund.essen,
+               family = 'poisson',
+               data=training)
+
+training$pred_glm <-predict(fit_glm)
+testing$pred_glm <-predict(fit_glm, newdata = testing)
+
+c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)))
+c(mape(training$y, exp(training$pred_glm)),mape(testing$y, exp(testing$pred_glm)))
+```
+
+
+## GLM -> add quasipoisson. 
+```{r fitting_glm, warning=FALSE, message=FALSE}
+fit_glm<-glm(y~ds+ 
+               week + 
+               month +
+               year +
+               promo_01+
+#               promo_02+
+               promo_03+
+               promo_04+
+#               promo_05
+               Joghurt+
+               gesund.essen,
+               family = 'quasipoisson',
+               data=training)
+
+training$pred_glm <-predict(fit_glm)
+testing$pred_glm <-predict(fit_glm, newdata = testing)
+
+c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)))
+c(mape(training$y, exp(training$pred_glm)),mape(testing$y, exp(testing$pred_glm)))
+```
+
+
+## GLM -> summary
+```{r fitting_glm, warning=FALSE, message=FALSE}
+summary(fit_glm)
+```
+
+
+With summary() we checked if the continous variables have influence -> it seems not all
+
+
+## GLM -> take out irrelevant variables 
+```{r fitting_glm, warning=FALSE, message=FALSE}
+fit_glm<-glm(y~ds+ 
+               week + 
+               month +
+               year +
+               promo_01+
+#               promo_02+
+               promo_03+
+               promo_04,
+#               promo_05+
+#               Joghurt+
+#               gesund.essen,
+               family = 'quasipoisson',
+               data=training)
+
+training$pred_glm <-predict(fit_glm)
+testing$pred_glm <-predict(fit_glm, newdata = testing)
+
+c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)))
+c(mape(training$y, exp(training$pred_glm)),mape(testing$y, exp(testing$pred_glm)))
+```
+
+
+## GLM -> drop1
+```{r fitting_glm, warning=FALSE, message=FALSE}
+drop1(fit_glm, test = 'F')
+```
+
+
+With drop1() we checked if the factor variables have influence -> it seems some not
+
+
+## GLM -> take out irrelevant variables 
+```{r fitting_glm, warning=FALSE, message=FALSE}
+fit_glm<-glm(y~ds+ 
+               week + 
+#               month +
+#               year +
+               promo_01+
+#               promo_02+
+#               promo_03+
+               promo_04,
+#               promo_05+
+#               Joghurt+
+#               gesund.essen,
+               family = 'quasipoisson',
+               data=training)
+
+training$pred_glm <-predict(fit_glm)
+testing$pred_glm <-predict(fit_glm, newdata = testing)
+
+c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)))
+c(mape(training$y, exp(training$pred_glm)),mape(testing$y, exp(testing$pred_glm)))
+```
+
+
+## GAM: As third model to compare with, a generalized additive model with smoothness estimation is used (GAM). 
 ```{r fitting_gam, warning=FALSE, message=FALSE}
 library(gam)
 
