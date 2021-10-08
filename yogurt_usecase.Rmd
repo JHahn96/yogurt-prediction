@@ -261,7 +261,7 @@ summary(fit_glm)
 ```
 
 
-With summary() we checked if the continous variables have influence -> it seems some not
+With summary() we checked if the continous variables have influence -> it seems not all
 
 
 ## GLM -> take out irrelevant variables 
