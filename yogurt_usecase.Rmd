@@ -133,7 +133,9 @@ AL<-df_final[,c("yrwk_start",
                 "promo_04", 
                 "promo_05",
                 "Joghurt",
-                "gesund.essen")]
+                "gesund.essen",
+                "prod.milchpreis.a.y",
+                "kon.yougurtpr.180.fru.y")]
 names(AL)<-c("ds",
              "y",
              "year",
@@ -145,7 +147,9 @@ names(AL)<-c("ds",
              "promo_04",
              "promo_05",
              "Joghurt",
-             "gesund.essen")
+             "gesund.essen",
+             "milchpreis",
+             "yogurtpreis")
 
 ## the test set is the last 4 weeks measured, the training set is everithing else
 ntest <- 12 # measurements weeks ntest definiere ich weiter oben
@@ -343,6 +347,130 @@ testing$pred_gam <-predict(fit_gam, newdata = testing)
 
 c(rmse(training$y, training$pred_gam),rmse(testing$y, testing$pred_gam))
 c(mape(training$y, training$pred_gam),mape(testing$y, testing$pred_gam))
+```
+
+
+## Easy Tree
+```{r fitting_gam, echo=TRUE, message=FALSE, warning=FALSE}
+library(party)
+# dataframe to put values of loop in
+d = data.frame(rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
+for(i in seq(1,length(dfs))){
+  #----------------------------------------------------------------------------------------------------------
+  df_f<-dfs[[i]]
+
+  # refactor columns for prophet package
+  A<-df_f[,c("yrwk_start", "sales")]
+  names(A)<-c("ds","y")
+  #--------------------------------------------------------------------------------------------------------
+  AL<-df_f[,c("yrwk_start", 
+                "sales",
+                "year", 
+                "month", 
+                "week", 
+                "promo_01", 
+                "promo_02", 
+                "promo_03", 
+                "promo_04", 
+                "promo_05",
+                "Joghurt",
+                "gesund.essen",
+                "prod.milchpreis.a.y",
+                "kon.yougurtpr.180.fru.y")]
+  names(AL)<-c("ds",
+               "y",
+               "year",
+               "month",
+               "week",
+               "promo_01",
+               "promo_02",
+               "promo_03",
+               "promo_04",
+               "promo_05",
+               "Joghurt",
+               "gesund.essen",
+               "milchpreis",
+               "yogurtpreis")
+  
+  ## the test set is the last 4 weeks measured, the training set is everithing else
+  ntest <- 12 # measurements weeks ntest definiere ich weiter oben
+  len <- nrow(AL)
+  training<-AL[1:(len-ntest),]
+  testing<-AL[(len-ntest+1):len,]
+  
+  c(min(training$ds), max(training$ds))
+  c(min(testing$ds), max(testing$ds))
+  #--------------------------------------------------------------------------------------------------------
+  # tree with party
+  # ds taken out -> date is not supported
+  tree <- ctree(y~#ds+
+                  week + 
+                  month +
+                  year +
+                  promo_01+
+                  promo_02+
+                  promo_03+
+                  promo_04+
+                  promo_05+
+                  Joghurt+
+                  gesund.essen+
+                  yogurtpreis+
+                  milchpreis,
+                  data=training)
+  
+  # show tree
+  plot(tree)
+  
+  training$pred_tree <-predict(tree)
+  testing$pred_tree <-predict(tree, newdata = testing)
+  
+  a <- c(rmse(training$y, training$pred_tree),rmse(testing$y, testing$pred_tree))
+  b <- c(mape(training$y, training$pred_tree),mape(testing$y, testing$pred_tree))
+  c <- c(a,b)
+  d[i, ] = c
+  print(c)
+}
+```
+
+
+## Easy Tree
+```{r fitting_gam, echo=TRUE, message=FALSE, warning=FALSE}
+length(dfs)
+range(1:length(dfs))
+a <- range(1:length(dfs))
+a[1]
+```
+
+
+## Easy Tree
+```{r fitting_gam, echo=TRUE, message=FALSE, warning=FALSE}
+# tree with party
+# ds taken out -> date is not supported
+library(party)
+tree <- ctree(y~#ds+
+                week + 
+                month +
+                year +
+                promo_01+
+                promo_02+
+                promo_03+
+                promo_04+
+                promo_05+
+                Joghurt+
+                gesund.essen+
+                yogurtpreis+
+                milchpreis,
+                data=training)
+
+# show tree
+plot(tree)
+
+training$pred_tree <-predict(tree)
+testing$pred_tree <-predict(tree, newdata = testing)
+
+c(rmse(training$y, training$pred_tree),rmse(testing$y, testing$pred_tree))
+c(mape(training$y, training$pred_tree),mape(testing$y, testing$pred_tree))
+
 ```
 
 
