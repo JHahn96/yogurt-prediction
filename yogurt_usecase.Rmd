@@ -707,7 +707,7 @@ for(i in seq(1,length(dfs))){
   
   
   prod <- as.character(unlist(df_f[1,3]))
-  model <- "model_basic_tree"
+  model <- "Prophet1"
   a <- c(rmse(training$y, training$yhat),rmse(testing$y, testing$yhat))
   b <- c(mape(training$y, training$yhat),mape(testing$y, testing$yhat))
   c <- c(prod,model,a,b)
