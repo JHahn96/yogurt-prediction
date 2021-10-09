@@ -28,30 +28,7 @@ df<-load.data.frame(keyword.vec)
 # list of all yogurts 
 dfs<-load.data.frames(keyword.vec)
 
-gesund<-dfs[[1]]$gesund.essen
-Joghurt<-dfs[[1]]$Joghurt
 
-#nur jeden vierten Eintrag auswählen
-gesund<-gesund[seq(1,length(gesund),4)]
-Joghurt<-Joghurt[seq(1,length(Joghurt),4)]
-
-
-ntest <- 12 # measurements months, wollen wir hier wirklich nur 3 Monate?
-len <- length(gesund)
-trainingg<-gesund[c(1:(len-ntest))]
-testingg<-gesund[c((len-ntest+1):len)]
-
-trainingJ<-Joghurt[c(1:(len-ntest))]
-testingJ<-Joghurt[c((len-ntest+1):len)]
-library(forecast)
-auto.arima(trainingg, ic = "aic") #nichts
-auto.arima(trainingJ, ic = "aic") #1/1/1
-
-Jog<-arima(x=trainingJ,order=c(1,1,1))
-force.pred <- predict(Jog, n.ahead = 12)
-
-force.pred
-testingJ
 ```
 
 ###Describe the dependent variable: waiting times and some of the key predictors
@@ -75,7 +52,42 @@ mape<-function(actual, predicted){
 }
 
 ```
-### Prepare the data for analysis
+### Vorhersage von Prophet
+
+```{r prepare_data, warning=FALSE, message=FALSE}
+gesund<-dfs[[1]]$gesund.essen
+Joghurt<-dfs[[1]]$Joghurt
+
+#nur jeden vierten Eintrag auswählen
+gesund<-gesund[seq(1,length(gesund),4)]
+Joghurt<-Joghurt[seq(1,length(Joghurt),4)]
+
+
+ntest <- 12 # measurements months, wollen wir hier wirklich nur 3 Monate?
+len <- length(gesund)
+trainingg<-gesund[c(1:(len-ntest))]
+testingg<-gesund[c((len-ntest+1):len)]
+
+trainingJ<-Joghurt[c(1:(len-ntest))]
+testingJ<-Joghurt[c((len-ntest+1):len)]
+
+
+library(forecast)
+auto.arima(trainingg, ic = "aic") #0/0/1
+auto.arima(trainingJ, ic = "aic") #1/1/0
+
+ges<-arima(x=trainingg,order=c(0,0,1))
+Jog<-arima(x=trainingJ,order=c(1,1,0))
+ges.pred <- predict(ges, n.ahead = 12)
+Jog.pred <- predict(Jog, n.ahead = 12)
+
+##Jonathan, ges.pred und Jog.pred sind die predicted values. Allerdings ändert autoarim sich immer wieder. Im Moment sind es monatliche Daten, müsste man wieder auf wöchentlich hochrechnen
+
+
+
+```
+
+Loop
 
 ```{r prepare_data, warning=FALSE, message=FALSE}
 ###Hier startet der Monsterloop
