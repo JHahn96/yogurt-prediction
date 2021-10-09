@@ -343,6 +343,8 @@ testing$pred_glm <- predict(fit_glm, newdata = testing)
 c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)))
 c(mape(training$y, exp(training$pred_glm)),mape(testing$y, exp(testing$pred_glm)))
 
+#install.packages("performance")
+library("performance")
 model_performance(fit_glm)
 
 drop1(fit_glm, test = 'F')
@@ -374,12 +376,17 @@ c(mape(training$y, training$pred_gam),mape(testing$y, testing$pred_gam))
 ```
 
 ## Loop GLM and Easy Tree --> store Results in two dfs
+## Diesen Loop brauchen wir dann über alle Tests
 
 ```{r loop glm and easy tree, warning=FALSE, message=FALSE}
 library(party)
 # dataframe to put values of loop in
 d = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
 d_glm = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
+
+
+
+
 for(i in seq(1,length(dfs))){
   #----------------------------------------------------------------------------------------------------------
   df_f<-dfs[[i]]
@@ -614,25 +621,136 @@ c(mape(training$y, training$pred_tree),mape(testing$y, testing$pred_tree))
 ```
 
 
-## Prophet: As third model prophet ist used, first only with holidays added
+## Prophet: As third model prophet ist used, first only with holidays ???Lockdown? added
 ```{r install_library, warning=FALSE, message=FALSE}
+
+d_prop1 = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
+
+d_prop2 = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
+
+
+for(i in seq(1,length(dfs))){
+  #----------------------------------------------------------------------------------------------------------
+  df_f<-dfs[[i]]
+
+  # refactor columns for prophet package
+  A<-df_f[,c("yrwk_start", "sales")]
+  names(A)<-c("ds","y")
+  #--------------------------------------------------------------------------------------------------------
+  AL<-df_f[,c("yrwk_start", 
+                "sales",
+                "year", 
+                "month", 
+                "week", 
+                "promo_01", 
+                "promo_02", 
+                "promo_03", 
+                "promo_04", 
+                "promo_05",
+                "Joghurt",
+                "gesund.essen",
+                "prod.milchpreis.a.y",
+                "kon.yougurtpr.180.fru.y")]
+  names(AL)<-c("ds",
+               "y",
+               "year",
+               "month",
+               "week",
+               "promo_01",
+               "promo_02",
+               "promo_03",
+               "promo_04",
+               "promo_05",
+               "Joghurt",
+               "gesund.essen",
+               "milchpreis",
+               "yogurtpreis")
+  
+  ## the test set is the last 4 weeks measured, the training set is everithing else
+  ntest <- 12 # measurements weeks ntest definiere ich weiter oben
+  len <- nrow(AL)
+  training<-AL[1:(len-ntest),]
+  testing<-AL[(len-ntest+1):len,]
+  
+  c(min(training$ds), max(training$ds))
+  c(min(testing$ds), max(testing$ds))
+  
+  library(prophet)
+  ##holidays richtig spezifizieren; jeweils eine Woche lang, damit unser Tag enthalen ist
+  years <- c(2016, 2017, 2018, 2019, 2020, 2021)
+  country.name <- 'CH'
+  df <- prophet:::make_holidays_df(years, country.name)
+
+  ##make sure that each holiday hots over one week
+  df$lower_window<--4
+  df$upper_window<-4
+
+  ##combine h and df
+  df2<-select(df,"holiday","ds","lower_window","upper_window")
+
+  s<-rbind(h,df2)
+  #only holidays
+
+  m <- prophet(holidays=s, mcmc_samples=300, 
+              holidays_prior_scale=0.5, 
+               changepoint_prior_scale=0.01, 
+              yearly.seasonality=TRUE)
+#m <- add_country_holidays(m, country_name = 'CH')
+#m <- add_country_holidays(m, df)
+  m <- fit.prophet(m, training)
+  future <- make_future_dataframe(m, periods = ntest, freq = "week", include_history = TRUE)
+  fcst <- predict(m, future)
+  n<-nrow(training)
+  training$yhat<-fcst$yhat[1:n]
+  testing$yhat<-fcst$yhat[(n+1):(n+ntest)]
+  
+  
+  
+  prod <- as.character(unlist(df_f[1,3]))
+  model <- "model_basic_tree"
+  a <- c(rmse(training$y, training$yhat),rmse(testing$y, testing$yhat))
+  b <- c(mape(training$y, training$yhat),mape(testing$y, testing$yhat))
+  c <- c(prod,model,a,b)
+  d_prop1[i, ] = c
+  
+  }
+
+
+
+
+
+
 library(prophet)
+
+##holidays richtig spezifizieren; jeweils eine Woche lang, damit unser Tag enthalen ist
+years <- c(2016, 2017, 2018, 2019, 2020, 2021)
+country.name <- 'CH'
+df <- prophet:::make_holidays_df(years, country.name)
+
+##make sure that each holiday hots over one week
+df$lower_window<--4
+df$upper_window<-4
+
+##combine h and df
+df2<-select(df,"holiday","ds","lower_window","upper_window")
+
+s<-rbind(h,df2)
+
 ```
 ```{r prophet_with_holyday_model, cache=TRUE}
-m <- prophet(holidays=h, mcmc_samples=300, 
+m <- prophet(holidays=s, mcmc_samples=300, 
              holidays_prior_scale=0.5, 
              changepoint_prior_scale=0.01, 
-             yearly.seasonality=TRUE,
-             weekly.seasonality=TRUE, 
-             daily.seasonality=TRUE)
-m <- add_country_holidays(m, country_name = 'CH')
+             yearly.seasonality=TRUE)
+#m <- add_country_holidays(m, country_name = 'CH')
+#m <- add_country_holidays(m, df)
 m <- fit.prophet(m, training)
 ```
 
 Do a forecast for the model with holidays
 ```{r prophet_with_holydays_prediction, cache=TRUE}
 
-future <- make_future_dataframe(m, periods = ntest, freq = 60 *60, include_history = TRUE)
+future <- make_future_dataframe(m, periods = ntest, freq = "week", include_history = TRUE)
 
 fcst <- predict(m, future)
 ```
@@ -659,13 +777,14 @@ c(mape(training$y, training$yhat),mape(testing$y, testing$yhat))
 
 
 ```{r prophet_with_holydays_model, cache=TRUE}
-m_h_r <- prophet(holidays=h, mcmc_samples=300, 
+m_h_r <- prophet(holidays=s, mcmc_samples=300, 
              holidays_prior_scale=0.5, 
              changepoint_prior_scale=0.01, 
              #seasonality_mode='multiplicative', 
              yearly.seasonality=TRUE, 
-             weekly.seasonality=TRUE, 
-             daily.seasonality=FALSE)
+             #weekly.seasonality=TRUE, 
+             #daily.seasonality=FALSE
+             )
 
 
 m_h_r <- add_regressor(m_h_r, 'promo_01')
@@ -675,12 +794,14 @@ m_h_r <- add_regressor(m_h_r, "promo_04")
 m_h_r <- add_regressor(m_h_r, 'promo_05')
 m_h_r <- add_regressor(m_h_r, "Joghurt")
 m_h_r <- add_regressor(m_h_r, "gesund.essen")
+m_h_r <- add_regressor(m_h_r, "yogurtpreis")
+m_h_r <- add_regressor(m_h_r, "milchpreis")
 m_h_r <- fit.prophet(m_h_r, training)
 ```
 
 do a forecast for the model with holydays and regressors
 ```{r prophet_with_holydays_and_regressors_prediction, cache=TRUE}
-future <- make_future_dataframe(m_h_r, periods = ntest, freq = 60 *60, include_history = TRUE)
+future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
 
 future$promo_01<- AL[,c("promo_01")]
 future$promo_02<- AL[,c("promo_02")]
@@ -689,6 +810,8 @@ future$promo_04<- AL[,c("promo_04")]
 future$promo_05<- AL[,c("promo_05")]
 future$Joghurt<- AL[,c("Joghurt")]
 future$gesund.essen<- AL[,c("gesund.essen")]
+future$yogurtpreis<- AL[,c("yogurtpreis")]
+future$milchpreis<- AL[,c("milchpreis")]
 
 fcst_h_r <- predict(m_h_r, future)
 ```
