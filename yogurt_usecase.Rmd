@@ -324,8 +324,32 @@ c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)
 c(mape(training$y, exp(training$pred_glm)),mape(testing$y, exp(testing$pred_glm)))
 ```
 
+## GLM -> Final model
+```{r fitting_glm final, warning=FALSE, message=FALSE}
+fit_glm<-glm(y~ds+ 
+               week + 
+               milchpreis +
+               as.numeric(promo_01)+
+               as.numeric(promo_02)+
+               as.numeric(promo_03)+
+               as.numeric(promo_04)+
+               as.numeric(promo_05),
+               data=training,
+               family="quasipoisson")
 
-## GAM: As third model to compare with, a generalized additive model with smoothness estimation is used (GAM). 
+training$pred_glm <- predict(fit_glm)
+testing$pred_glm <- predict(fit_glm, newdata = testing)
+
+c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)))
+c(mape(training$y, exp(training$pred_glm)),mape(testing$y, exp(testing$pred_glm)))
+
+model_performance(fit_glm)
+
+drop1(fit_glm, test = 'F')
+```
+
+
+## DELETE: GAM: As third model to compare with, a generalized additive model with smoothness estimation is used (GAM). 
 ```{r fitting_gam, warning=FALSE, message=FALSE}
 library(gam)
 
@@ -347,6 +371,122 @@ testing$pred_gam <-predict(fit_gam, newdata = testing)
 
 c(rmse(training$y, training$pred_gam),rmse(testing$y, testing$pred_gam))
 c(mape(training$y, training$pred_gam),mape(testing$y, testing$pred_gam))
+```
+
+## Loop GLM and Easy Tree --> store Results in two dfs
+
+```{r loop glm and easy tree, warning=FALSE, message=FALSE}
+library(party)
+# dataframe to put values of loop in
+d = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
+d_glm = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
+for(i in seq(1,length(dfs))){
+  #----------------------------------------------------------------------------------------------------------
+  df_f<-dfs[[i]]
+
+  # refactor columns for prophet package
+  A<-df_f[,c("yrwk_start", "sales")]
+  names(A)<-c("ds","y")
+  #--------------------------------------------------------------------------------------------------------
+  AL<-df_f[,c("yrwk_start", 
+                "sales",
+                "year", 
+                "month", 
+                "week", 
+                "promo_01", 
+                "promo_02", 
+                "promo_03", 
+                "promo_04", 
+                "promo_05",
+                "Joghurt",
+                "gesund.essen",
+                "prod.milchpreis.a.y",
+                "kon.yougurtpr.180.fru.y")]
+  names(AL)<-c("ds",
+               "y",
+               "year",
+               "month",
+               "week",
+               "promo_01",
+               "promo_02",
+               "promo_03",
+               "promo_04",
+               "promo_05",
+               "Joghurt",
+               "gesund.essen",
+               "milchpreis",
+               "yogurtpreis")
+  
+  ## the test set is the last 4 weeks measured, the training set is everithing else
+  ntest <- 12 # measurements weeks ntest definiere ich weiter oben
+  len <- nrow(AL)
+  training<-AL[1:(len-ntest),]
+  testing<-AL[(len-ntest+1):len,]
+  
+  c(min(training$ds), max(training$ds))
+  c(min(testing$ds), max(testing$ds))
+  
+  #--------------------------------------------------------------------------------------------------------
+  # GLM - Model 1
+
+  fit_glm<-glm(y~ds+ 
+               week + 
+               milchpreis +
+               as.numeric(promo_01)+
+               as.numeric(promo_02)+
+               as.numeric(promo_03)+
+               as.numeric(promo_04)+
+               as.numeric(promo_05),
+               data=training,
+               family="quasipoisson")
+
+  training$pred_glm <- predict(fit_glm)
+  testing$pred_glm <- predict(fit_glm, newdata = testing)
+
+  prod <- as.character(unlist(df_f[1,3]))
+  model <- "model_GLM"
+  a_glm <- c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)))
+  b_glm <- c(mape(training$y, exp(training$pred_glm)),mape(testing$y, exp(testing$pred_glm)))
+  c_glm <- c(prod,model,a_glm,b_glm)
+  d_glm[i, ] = c_glm
+  print(c_glm)
+  
+  #--------------------------------------------------------------------------------------------------------
+  # tree with party
+  # ds taken out -> date is not supported
+  tree <- ctree(y~#ds+
+                  week + 
+                  month +
+                  year +
+                  promo_01+
+                  promo_02+
+                  promo_03+
+                  promo_04+
+                  promo_05+
+                  Joghurt+
+                  gesund.essen+
+                  yogurtpreis+
+                  milchpreis,
+                  data=training)
+  
+  # show tree
+  plot(tree)
+  
+  training$pred_tree <-predict(tree)
+  testing$pred_tree <-predict(tree, newdata = testing)
+  
+  prod <- as.character(unlist(df_f[1,3]))
+  model <- "model_basic_tree"
+  a <- c(rmse(training$y, training$pred_tree),rmse(testing$y, testing$pred_tree))
+  b <- c(mape(training$y, training$pred_tree),mape(testing$y, testing$pred_tree))
+  c <- c(prod,model,a,b)
+  d[i, ] = c
+  print(c)
+}
+
+print(d_glm)
+print(d)
+
 ```
 
 
