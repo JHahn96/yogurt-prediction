@@ -1,0 +1,339 @@
+---
+title: "Data Science in Healthcare"
+author: "Natalie Borter, Pascal Humbel, Jonathan Hahn"
+date: "18.01.2021"
+output: html_document;
+        pdf_document
+params:
+  wd: !r getwd()
+---
+
+```{r setup, include=True, cache=TRUE}
+# Setting working directory to the directory of the file
+knitr::opts_knit$set(root.dir = getwd())
+source("collecting_data.R")
+## executing data preparation with function load_dada_frame() defined in collecting_data.R
+## Kannst du mir überall noch die Variablen MClassi und Rest einbinden? Ich mache sie mit ##Descriptives. Es handelt sich um eine Zusammenfassung der Daten, mal schauen ob sich das besser vorhersagen lässt???
+
+##source("Deskriptives.R")
+
+
+
+# define the keywords for google trend analysis
+keyword.vec<-c("Joghurt", "gesund essen")
+
+# union of all yogurts
+df<-load.data.frame(keyword.vec)
+
+# list of all yogurts 
+dfs<-load.data.frames(keyword.vec)
+
+gesund<-dfs[[1]]$gesund.essen
+Joghurt<-dfs[[1]]$Joghurt
+
+#nur jeden vierten Eintrag auswählen
+gesund<-gesund[seq(1,length(gesund),4)]
+Joghurt<-Joghurt[seq(1,length(Joghurt),4)]
+
+
+ntest <- 12 # measurements months, wollen wir hier wirklich nur 3 Monate?
+len <- length(gesund)
+trainingg<-gesund[c(1:(len-ntest))]
+testingg<-gesund[c((len-ntest+1):len)]
+
+trainingJ<-Joghurt[c(1:(len-ntest))]
+testingJ<-Joghurt[c((len-ntest+1):len)]
+library(forecast)
+auto.arima(trainingg, ic = "aic") #nichts
+auto.arima(trainingJ, ic = "aic") #1/1/1
+
+Jog<-arima(x=trainingJ,order=c(1,1,1))
+force.pred <- predict(Jog, n.ahead = 12)
+
+force.pred
+testingJ
+```
+
+###Describe the dependent variable: waiting times and some of the key predictors
+
+
+```{r boxplots, warning=FALSE, message=FALSE}
+ggplot(df, aes(x=yrwk_start, y=sales)) + 
+    geom_line(aes(colour=article_name, group=article_name)) + # colour, group both depend on cond2
+    geom_point(aes(colour=article_name),               # colour depends on cond2
+               size=1)                          # larger points, different shape
+
+##define two functions to assess model fit
+
+## rmse = root mean squared error
+rmse<-function(actual, predicted){
+  round((sum((actual-predicted)^2)/length(actual))^.5,2)
+}
+## mean absolute percentage error
+mape<-function(actual, predicted){
+  round(mean(100*abs((actual-predicted)/actual)),2)
+}
+
+```
+### Prepare the data for analysis
+
+```{r prepare_data, warning=FALSE, message=FALSE}
+###Hier startet der Monsterloop
+## Zuerst alle dataframes definieren
+library(party)
+
+d_lm = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
+
+d = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
+
+d_glm = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
+
+d_prop1 = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
+
+d_prop2 = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
+
+
+
+
+for(i in seq(1,length(dfs))){
+  library(tidyverse)
+  df_final<-dfs[[i]]
+
+
+
+# create lockdown
+  ld_start = as.Date("08.04.2020", format="%d.%m.%Y")
+  ld_end = as.Date("26.04.2020", format="%d.%m.%Y")
+  ld<-data.frame("Date" = seq(ld_start,ld_end, by = 'days'), row.names = )
+  ld[,"Bezeichnung"]<-"Lockdown"
+
+#events<-rbind(ld, hG_factoreneva)
+  events <- ld
+
+  h<-data_frame(
+    holiday = events[,"Bezeichnung"],
+    ds = as.Date(events[,"Date"]),
+    lower_window = 0,
+    upper_window = 1
+  )
+
+# refactor columns for prophet package
+  A<-df_final[,c("yrwk_start", "sales")]
+  names(A)<-c("ds","y")
+
+  AL<-df_final[,c("yrwk_start", 
+                  "sales",
+                  "year", 
+                  "month", 
+                  "week", 
+                  "promo_01", 
+                  "promo_02", 
+                  "promo_03", 
+                  "promo_04", 
+                  "promo_05",
+                  "Joghurt",
+                  "gesund.essen",
+                  "prod.milchpreis.a.y",
+                  "kon.yougurtpr.180.fru.y")]
+  names(AL)<-c("ds",
+               "y",
+               "year",
+               "month",
+               "week",
+               "promo_01",
+               "promo_02",
+               "promo_03",
+               "promo_04",
+               "promo_05",
+               "Joghurt",
+               "gesund.essen",
+               "milchpreis",
+               "yogurtpreis")
+
+  ## the test set is the last 4 weeks measured, the training set is everithing else
+  ntest <- 12 # measurements weeks ntest definiere ich weiter oben
+  len <- nrow(AL)
+  training<-AL[1:(len-ntest),]
+  testing<-AL[(len-ntest+1):len,]
+  
+  c(min(training$ds), max(training$ds))
+  c(min(testing$ds), max(testing$ds))
+  
+  mod<-lm(y~as.numeric(week)+as.numeric(month)+as.numeric(promo_01),data=training)
+
+  testingA<-mod$coefficients[1]+mod$coefficients[2]*as.numeric(testing$week)+mod$coefficients[3]*as.numeric(testing$month)+mod$coefficients[4]*as.numeric(testing$promo_01)
+  
+  
+  training$pred_median <-mod$fitted.values
+  testing$pred_median <-testingA
+  
+  prod <- as.character(unlist(df_final[1,3]))
+  model <- "lin1"
+  a <- c(rmse(training$y, training$pred_median),rmse(testing$y, testing$pred_median))
+  b <- c(mape(training$y, training$pred_median),mape(testing$y, testing$pred_median))
+  c <- c(prod,model,a,b)
+  d_lm[i, ] = c
+  
+  ###zweites Modell
+  fit_glm<-glm(y~ds+ 
+               week + 
+               milchpreis +
+               as.numeric(promo_01)+
+               as.numeric(promo_02)+
+               as.numeric(promo_03)+
+               as.numeric(promo_04)+
+               as.numeric(promo_05),
+               data=training,
+               family="quasipoisson")
+
+  training$pred_glm <- predict(fit_glm)
+  testing$pred_glm <- predict(fit_glm, newdata = testing)
+
+  prod <- as.character(unlist(df_final[1,3]))
+  model <- "model_GLM"
+  a_glm <- c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)))
+  b_glm <- c(mape(training$y, exp(training$pred_glm)),mape(testing$y, exp(testing$pred_glm)))
+  c_glm <- c(prod,model,a_glm,b_glm)
+  d_glm[i, ] = c_glm
+  print(c_glm)
+  
+  #--------------------------------------------------------------------------------------------------------
+  # tree with party
+  # ds taken out -> date is not supported
+  tree <- ctree(y~#ds+
+                  week + 
+                  month +
+                  year +
+                  promo_01+
+                  promo_02+
+                  promo_03+
+                  promo_04+
+                  promo_05+
+                  Joghurt+
+                  gesund.essen+
+                  yogurtpreis+
+                  milchpreis,
+                  data=training)
+  
+  # show tree
+  plot(tree)
+  
+  training$pred_tree <-predict(tree)
+  testing$pred_tree <-predict(tree, newdata = testing)
+  
+  prod <- as.character(unlist(df_final[1,3]))
+  model <- "model_basic_tree"
+  a <- c(rmse(training$y, training$pred_tree),rmse(testing$y, testing$pred_tree))
+  b <- c(mape(training$y, training$pred_tree),mape(testing$y, testing$pred_tree))
+  c <- c(prod,model,a,b)
+  d[i, ] = c
+  print(c)
+  
+  
+  library(prophet)
+  ##holidays richtig spezifizieren; jeweils eine Woche lang, damit unser Tag enthalen ist
+  years <- c(2016, 2017, 2018, 2019, 2020, 2021)
+  country.name <- 'CH'
+  df <- prophet:::make_holidays_df(years, country.name)
+
+  ##make sure that each holiday hots over one week
+  df$lower_window<--4
+  df$upper_window<-4
+
+  ##combine h and df
+  df2<-select(df,"holiday","ds","lower_window","upper_window")
+
+  s<-rbind(h,df2)
+  #only holidays
+
+  m <- prophet(holidays=s, mcmc_samples=300, 
+              holidays_prior_scale=0.5, 
+               changepoint_prior_scale=0.01, 
+              yearly.seasonality=TRUE)
+#m <- add_country_holidays(m, country_name = 'CH')
+#m <- add_country_holidays(m, df)
+  m <- fit.prophet(m, training)
+  future <- make_future_dataframe(m, periods = ntest, freq = "week", include_history = TRUE)
+  fcst <- predict(m, future)
+  n<-nrow(training)
+  training$yhat<-fcst$yhat[1:n]
+  testing$yhat<-fcst$yhat[(n+1):(n+ntest)]
+  
+  
+  
+  prod <- as.character(unlist(df_final[1,3]))
+  model <- "Prophet1"
+  a <- c(rmse(training$y, training$yhat),rmse(testing$y, testing$yhat))
+  b <- c(mape(training$y, training$yhat),mape(testing$y, testing$yhat))
+  c <- c(prod,model,a,b)
+  d_prop1[i, ] = c
+  
+  
+  
+  
+  #prophet 2
+  
+  m_h_r <- prophet(holidays=s, mcmc_samples=300, 
+             holidays_prior_scale=0.5, 
+             changepoint_prior_scale=0.01, 
+             #seasonality_mode='multiplicative', 
+             yearly.seasonality=TRUE, 
+             #weekly.seasonality=TRUE, 
+             #daily.seasonality=FALSE
+             )
+
+
+  m_h_r <- add_regressor(m_h_r, 'promo_01')
+  m_h_r <- add_regressor(m_h_r, "promo_02")
+  m_h_r <- add_regressor(m_h_r, 'promo_03')
+  m_h_r <- add_regressor(m_h_r, "promo_04")
+  m_h_r <- add_regressor(m_h_r, 'promo_05')
+  m_h_r <- add_regressor(m_h_r, "Joghurt")
+  m_h_r <- add_regressor(m_h_r, "gesund.essen")
+  m_h_r <- add_regressor(m_h_r, "yogurtpreis")
+  m_h_r <- add_regressor(m_h_r, "milchpreis")
+  m_h_r <- fit.prophet(m_h_r, training)
+  
+  future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
+
+  future$promo_01<- AL[,c("promo_01")]
+  future$promo_02<- AL[,c("promo_02")]
+  future$promo_03<- AL[,c("promo_03")]
+  future$promo_04<- AL[,c("promo_04")]
+  future$promo_05<- AL[,c("promo_05")]
+  future$Joghurt<- AL[,c("Joghurt")]
+  future$gesund.essen<- AL[,c("gesund.essen")]
+  future$yogurtpreis<- AL[,c("yogurtpreis")]
+  future$milchpreis<- AL[,c("milchpreis")]
+
+  fcst_h_r <- predict(m_h_r, future)
+
+  n<-nrow(training)
+
+  training$yhat_h_r<-fcst_h_r$yhat[1:n]
+  testing$yhat_h_r<-fcst_h_r$yhat[(n+1):(n+ntest)]
+  
+  a<-training$yhat_h_r<5
+  training$yhat_h_r[a]<-5
+  
+  b<-testing$yhat_h_r<5
+  testing$yhat_h_r[b]<-5
+
+  
+  
+  
+  
+  
+  prod <- as.character(unlist(df_final[1,3]))
+  model <- "Prophet2"
+  a <- c(rmse(training$y, training$yhat_h_r),rmse(testing$y, testing$yhat_h_r))
+  b <- c(mape(training$y, training$yhat_h_r),mape(testing$y, testing$yhat_h_r))
+  c <- c(prod,model,a,b)
+  d_prop2[i, ] = c
+}
+
+```
+
+
+
+
