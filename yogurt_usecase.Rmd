@@ -52,34 +52,17 @@ force.pred <- predict(Jog, n.ahead = 12)
 
 force.pred
 testingJ
+dfs[1]
 ```
 
 ###Describe the dependent variable: waiting times and some of the key predictors
 
 
-```{r boxplots, warning=FALSE, message=FALSE}
-ggplot(df, aes(x=yrwk_start, y=sales)) + 
-    geom_line(aes(colour=article_name, group=article_name)) + # colour, group both depend on cond2
-    geom_point(aes(colour=article_name),               # colour depends on cond2
-               size=1)                          # larger points, different shape
-
-```
 ### Prepare the data for analysis
 
 ```{r prepare_data, warning=FALSE, message=FALSE}
 library(tidyverse)
 df_final<-dfs[[1]]
-
-
-# TODO: load swiss hollydays
-# Holydays for Prophet
-
-#hG_factoreneva <- read.csv2(file = 'Data/fcal_Geneve_2019.csv', sep = ';')
-#hG_factoreneva[,"Date"]<-as.Date(hG_factoreneva$Datum,format="%d.%m.%Y" )
-#hG_factoreneva$Wochentag<-NULL
-#hG_factoreneva$Kalenderwoche<-NULL
-#hG_factoreneva$X<-NULL
-#hG_factoreneva$Datum<-NULL
 
 # create lockdown
 ld_start = as.Date("08.04.2020", format="%d.%m.%Y")
@@ -161,7 +144,7 @@ c(min(training$ds), max(training$ds))
 c(min(testing$ds), max(testing$ds))
 ```
 
-## Median: as more as 50% of the waiting times are 5 minutes (Median), a model predicting always the median is used for comparison
+## Regression Modell
 ```{r fitting_mean, warning=FALSE, message=FALSE}
 ###hier kommt ihr Regressionsmodell rein
 
@@ -324,29 +307,7 @@ c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)
 c(mape(training$y, exp(training$pred_glm)),mape(testing$y, exp(testing$pred_glm)))
 ```
 
-## GLM -> Final model
-```{r fitting_glm final, warning=FALSE, message=FALSE}
-fit_glm<-glm(y~ds+ 
-               week + 
-               milchpreis +
-               as.numeric(promo_01)+
-               as.numeric(promo_02)+
-               as.numeric(promo_03)+
-               as.numeric(promo_04)+
-               as.numeric(promo_05),
-               data=training,
-               family="quasipoisson")
 
-training$pred_glm <- predict(fit_glm)
-testing$pred_glm <- predict(fit_glm, newdata = testing)
-
-c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)))
-c(mape(training$y, exp(training$pred_glm)),mape(testing$y, exp(testing$pred_glm)))
-
-model_performance(fit_glm)
-
-drop1(fit_glm, test = 'F')
-```
 
 
 ## DELETE: GAM: As third model to compare with, a generalized additive model with smoothness estimation is used (GAM). 
@@ -612,6 +573,73 @@ c(rmse(training$y, training$pred_tree),rmse(testing$y, testing$pred_tree))
 c(mape(training$y, training$pred_tree),mape(testing$y, testing$pred_tree))
 
 ```
+## GLM -> Final model
+```{r fitting_glm final, warning=FALSE, message=FALSE}
+fit_glm<-glm(y~ds+ 
+               week + 
+               milchpreis +
+               as.numeric(promo_01)+
+               as.numeric(promo_02)+
+               as.numeric(promo_03)+
+               as.numeric(promo_04)+
+               as.numeric(promo_05),
+               data=training,
+               family="quasipoisson")
+
+training$pred_glm <- exp(predict(fit_glm))
+testing$pred_glm <- exp(predict(fit_glm, newdata = testing))
+
+c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)))
+c(mape(training$y, exp(training$pred_glm)),mape(testing$y, exp(testing$pred_glm)))
+library(performance)
+model_performance(fit_glm)
+
+drop1(fit_glm, test = 'F')
+```
+
+## XGBoost
+```{r fitting_gam, echo=TRUE, message=FALSE, warning=FALSE}
+library(xgboost)
+##We need to provide the x and y variables 
+## separatetly and in the following format:
+
+training
+X <- AL%>%
+  select(-y, -ds)%>% 
+  mutate(across(where(is.factor), as.numeric))%>%
+  as.matrix(.)
+
+X_train <- X[1:(len-ntest),]
+
+y <- AL[1:(len-ntest),]%>%
+  select(y) %>%
+  as.matrix(.)
+
+##Train model
+fit.gbt <- xgboost(data = X_train, 
+                   label = y,
+                   nrounds=70, 
+                   objective = "count:poisson")
+
+##Make predictions on training data
+pred_gbt_train = predict(fit.gbt, X[1:(len-ntest),])
+##Make predictions on test data
+pred_gbt_test = predict(fit.gbt, X[(len-ntest+1):len,])
+
+##Which variables are important?
+#require(ggplot2)
+library(Ckmeans.1d.dp)
+importance=xgb.importance(colnames(X), model = fit.gbt)
+xgb.ggplot.importance(importance)
+```
+Check the accuracy of the model
+```{r prophet_with_holydays_and_regressors_prediction_accuracy}
+training$xgboost<-pred_gbt_train
+testing$xgboost<-pred_gbt_test
+
+c(rmse(training$y, training$xgboost),rmse(testing$y, testing$xgboost))
+c(mape(training$y, training$xgboost),mape(testing$y, testing$xgboost))
+```
 
 
 ## Prophet: As third model prophet ist used, first only with holidays added
@@ -721,27 +749,26 @@ testing<-testing %>% rename(pred_prophet = yhat, pred_prophet_regressors = yhat_
 ```
 Plot the four models against eachother and add RMSE and MAPE
 ```{r plot_and_compare_models, warning=FALSE ,message=FALSE}
-testqstat<- data.table::melt(testing, id="ds", measure=c("pred_prophet", 
+testqstat<- data.table::melt(testing, id="ds", measure=c("xgboost", 
                                                          "pred_prophet_regressors", 
-                                                         "pred_gam", 
-                                                         "pred_median"))
+                                                         "pred_glm", 
+                                                         "pred_prophet"))
 
 model_names<- c(
-  'pred_prophet' = sprintf("Prophet Holydays \n RMSE: %.2f (Train) - %.2f (Test)",
-                   rmse(training$y, training$pred_prophet),rmse(testing$y, testing$pred_prophet)),
+  'xgboost' = sprintf("Tree Boosting \n RMSE: %.2f (Train) - %.2f (Test)",
+                   rmse(training$y, training$xgboost),rmse(testing$y, testing$xgboost)),
   
   'pred_prophet_regressors' = sprintf(
     "Prophet with Regressors \n RMSE: %.2f (Train) - %.2f (Test)",
                    rmse(training$y, training$pred_prophet_regressors),
                     rmse(testing$y, testing$pred_prophet_regressors)),
   
-  'pred_gam' = sprintf("GAM \n  RMSE: %.2f (Train) - %.2f (Test)",
-                   rmse(training$y, training$pred_gam),rmse(testing$y, testing$pred_gam)),  
+  'pred_glm' = sprintf("GLM \n  RMSE: %.2f (Train) - %.2f (Test)",
+                   rmse(training$y, training$pred_glm),rmse(testing$y, testing$pred_glm)),  
   
-  'pred_median' = sprintf("Median \n RMSE: %.2f (Train) - %.2f (Test)",
-                   rmse(training$y, training$pred_median),rmse(testing$y, testing$pred_median))
+  'pred_prophet' = sprintf("pred_prophet \n RMSE: %.2f (Train) - %.2f (Test)",
+                   rmse(training$y, training$pred_prophet),rmse(testing$y, testing$pred_prophet))
 )
-
 
 g1 <- ggplot(aes(y=value, x=ds, color=variable), data=testqstat) +
   
@@ -754,4 +781,5 @@ g1 <- ggplot(aes(y=value, x=ds, color=variable), data=testqstat) +
        x="Time", y="WaitingTime in min")+ 
   theme(legend.position = "none")
 g1
+
 ```
