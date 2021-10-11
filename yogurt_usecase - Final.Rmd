@@ -12,10 +12,6 @@ params:
 # Setting working directory to the directory of the file
 knitr::opts_knit$set(root.dir = getwd())
 source("collecting_data.R")
-## executing data preparation with function load_dada_frame() defined in collecting_data.R
-## Kannst du mir überall noch die Variablen MClassi und Rest einbinden? Ich mache sie mit ##Descriptives. Es handelt sich um eine Zusammenfassung der Daten, mal schauen ob sich das besser vorhersagen lässt???
-
-##source("Deskriptives.R")
 
 
 
@@ -23,18 +19,17 @@ source("collecting_data.R")
 keyword.vec<-c("Joghurt", "gesund essen")
 
 # union of all yogurts
-df<-load.data.frame(keyword.vec)
+#df<-load.data.frame(keyword.vec)
 
-# list of all yogurts 
+# list of all yogurts with own data frame for each yogurt
 dfs<-load.data.frames(keyword.vec)
-
+z<-dfs[[1]]
 
 ```
 
-###Describe the dependent variable: waiting times and some of the key predictors
+### Describe the dependent variable: waiting times and some of the key predictors
 
-
-```{r boxplots, warning=FALSE, message=FALSE}
+```{r rmse_mape, warning=FALSE, message=FALSE}
 
 ##define two functions to assess model fit
 
@@ -48,16 +43,16 @@ mape<-function(actual, predicted){
 }
 
 ```
-### Vorhersage von Prophet
 
-```{r prepare_data, warning=FALSE, message=FALSE}
+### Prediction of unknown Regressors
+
+```{r predict_regressors, warning=FALSE, message=FALSE}
 gesund<-dfs[[1]]$gesund.essen
 Joghurt<-dfs[[1]]$Joghurt
 
 #nur jeden vierten Eintrag auswählen
 #gesund<-gesund[seq(1,length(gesund),4)]
 #Joghurt<-Joghurt[seq(1,length(Joghurt),4)]
-
 
 ntest <- 12 # measurements months, wollen wir hier wirklich nur 3 Monate?
 len <- length(gesund)
@@ -84,13 +79,6 @@ Jog.pred <- predict(Jog, n.ahead = 12)
 
 Loop
 
-```{r}
-as.character(unlist(df_final[1,3]))
-df_final$article_name[1]
-d_lm
-```
-
-
 ```{r prepare_data, warning=FALSE, message=FALSE}
 ###Hier startet der Monsterloop
 ## Zuerst alle dataframes definieren
@@ -110,16 +98,13 @@ d_xgboost = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rm
 
 
 library(tidyverse)
+library(prophet)
 
-#for(i in seq(1,length(dfs))){
+for(i in seq(1,length(dfs))){
 
-for(i in seq(1,4)){  
-  
   dfs[[i]][is.na(dfs[[i]])] <- 0
   
   df_final<-dfs[[i]]
-
-
 
 # create lockdown
   ld_start = as.Date("08.04.2020", format="%d.%m.%Y")
@@ -153,8 +138,8 @@ for(i in seq(1,4)){
                   "promo_05",
                   "Joghurt",
                   "gesund.essen",
-                  "prod.milchpreis.a.y",
-                  "kon.yougurtpr.180.fru.y")]
+                  "prod.milchpreis.a",
+                  "kon.yougurtpr.180.fru")]
   names(AL)<-c("ds",
                "y",
                "year",
@@ -251,7 +236,6 @@ for(i in seq(1,4)){
   print(c)
   
   
-  library(prophet)
   ##holidays richtig spezifizieren; jeweils eine Woche lang, damit unser Tag enthalen ist
   years <- c(2016, 2017, 2018, 2019, 2020, 2021)
   country.name <- 'CH'
@@ -396,7 +380,7 @@ for(i in seq(1,4)){
   c <- c(prod,model,a,b)
   d_xgboost[i, ] = c
 }
-d_xgboost
+#d_xgboost
 ```
 
 
