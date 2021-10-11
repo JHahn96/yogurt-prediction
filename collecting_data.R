@@ -27,7 +27,13 @@ load.data.frame<-function(keyword.vec){
   
   # get all trends from keyword vector
   for (keyword in keyword.vec) {
-    df.cat<-get.google.trend(keyword, df.cat)
+    t<-get.google.trend(keyword, df.cat)
+    df.cat<-merge(x = df.cat, 
+                  y = t, 
+                  by.y = c("week", "month",  "year"), 
+                  by.x = c("week", "month",  "year") ,  
+                  all.x = TRUE)
+    df.cat
   }
   
   # add yogurt prices
@@ -53,10 +59,15 @@ load.data.frames<-function(keyword.vec){
   
   # get google trend for all keywords
   for (keyword in keyword.vec) {
+    t <-get.google.trend(keyword, as.data.frame(ldf[1]))
     for (i in 1:length(ldf)){
-
-      ldf[[i]] <-get.google.trend(keyword, as.data.frame(ldf[i]))
-      
+      i <-1 
+      # add gtrend
+      ldf[[i]]<-merge(x = ldf[i], 
+                      y = t, 
+                      by.y = c("week", "month",  "year"), 
+                      by.x = c("week", "month",  "year"),
+                      all.x = TRUE)
       # add yogurt prices
       ldf[[i]] <-merge(x = ldf[i], y = read.yogurt.data(), by.y = "date", by.x = "date.month" ,  all.x = TRUE)
       
@@ -96,22 +107,47 @@ convert.to.correct.data.types<-function(df){
   
 }
 
+#keyword<-"Joghurt"
+#df<-df.cat
+#current_year <- 2021
 get.google.trend<-function(keyword, df){
-  start <- paste(substr(min(df$yrwk_start),1,8), "01",sep="")
-  end <- max(df$yrwk_end)
-  #print(paste(start,end,sep=" "))
-  A<-gtrends(keyword,geo="CH",time=paste(start,end,sep=" "))
-  B<-A$interest_over_time
-  
-  B <- B %>%
-    rename(!!gsub(" ", ".", keyword) := hits)%>%
-    select(-keyword,-geo,-time, -gprop, -category)
+    start <- paste(substr(min(df$yrwk_start),1,8), "01",sep="")
+    end <- max(df$yrwk_end)
+    x<-get_daily_gtrend(
+      keyword = c(keyword), 
+      geo = "CH", 
+      from = start, 
+      to = end
+      )
+    t<-x %>%
+      filter(date>= min(df$yrwk_start))%>%
+      mutate(week = week(date), month = month(date), year = year(date))%>%
+      group_by(week,month,year ) %>%
+      summarise(mean = mean(est_hits))%>%
+      rename(!!gsub(" ", ".", keyword) := mean)
     
+    t
+    #A<-gtrends(keyword,geo="CH",time=paste(start,end,sep=" "))
+    #B<-A$interest_over_time
+    
+    #B <- B %>%
+    #  rename(!!gsub(" ", ".", keyword) := hits)%>%
+    #  select(-keyword,-geo,-time, -gprop, -category)
+    
+    #B$date<-as.Date(B$date, format="%Y-%m-%d")
+    #datalist[[i]] <- B
+    
+ 
+    #start <- paste(substr(min(df$yrwk_start),1,8), "01",sep="")
+    #end <- max(df$yrwk_end)
+    #print(paste(start,end,sep=" "))
   
-  B$date<-as.Date(B$date, format="%Y-%m-%d")
-  df<-merge(x = df, y = B, by.y = "date", by.x = "date.month" ,  all.x = TRUE)
-  #print(df)
-  return(df)
+  
+  
+    #df<-merge(x = df, y = B, by.y = "date", by.x = "date.month" ,  all.x = TRUE)
+    
+    #print(df)
+    return(t)
 }
 
 
@@ -205,6 +241,61 @@ calc_mclassi_rest<-function(df_yogurt, df_all){
   df <- merge(x = df_yogurt, y = Tot, by.y = "date", by.x = "yrwk_start",  all.x = TRUE)
   return(df)
 }
+
+
+
+library(gtrendsR)
+library(tidyverse)
+library(lubridate)
+## http://alexdyachenko.com/all/how-to-get-daily-google-trends-data-for-any-period-with-r/
+get_daily_gtrend <- function(keyword = c('Taylor Swift', 'Kim Kardashian'), geo = 'US', from = '2013-01-01', to = '2019-08-15') {
+  if (ymd(to) >= floor_date(Sys.Date(), 'month')) {
+    to <- floor_date(ymd(to), 'month') - days(1)
+    
+    if (to < from) {
+      stop("Specifying \'to\' date in the current month is not allowed")
+    }
+  }
+  
+  mult_m <- gtrends(keyword = keyword, geo = geo, time = paste(from, to))$interest_over_time %>%
+    mutate(hits = as.integer(ifelse(hits == '<1', '0', hits))) %>%
+    group_by(month = floor_date(date, 'month'), keyword) %>%
+    summarise(hits = sum(hits)) %>%
+    ungroup() %>%
+    mutate(ym = format(month, '%Y-%m'),
+           mult = hits / max(hits)) %>%
+    select(month, ym, keyword, mult) %>%
+    as_tibble()
+  
+  pm <- tibble(s = seq(ymd(from), ymd(to), by = 'month'), 
+               e = seq(ymd(from), ymd(to), by = 'month') + months(1) - days(1))
+  
+  raw_trends_m <- tibble()
+  
+  for (i in seq(1, nrow(pm), 1)) {
+    curr <- gtrends(keyword, geo = geo, time = paste(pm$s[i], pm$e[i]))
+    print(paste('for', pm$s[i], pm$e[i], 'retrieved', count(curr$interest_over_time), 'days of data (all keywords)'))
+    raw_trends_m <- rbind(raw_trends_m,
+                          curr$interest_over_time)
+  }
+  
+  trend_m <- raw_trends_m %>%
+    select(date, keyword, hits) %>%
+    mutate(ym = format(date, '%Y-%m'),
+           hits = as.integer(ifelse(hits == '<1', '0', hits))) %>%
+    as_tibble()
+  
+  trend_res <- trend_m %>%
+    left_join(mult_m) %>%
+    mutate(est_hits = hits * mult) %>%
+    select(date, keyword, est_hits) %>%
+    as_tibble() %>%
+    mutate(date = as.Date(date))
+  
+  return(trend_res)
+}
+
+
 
 ###############################################################################
 ## DATA PREPARATION finished
