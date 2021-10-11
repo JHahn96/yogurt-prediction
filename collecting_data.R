@@ -4,14 +4,16 @@
 library(gtrendsR)
 library(hablar)
 library(tidyverse)
+#install.packages("GPArotation")
+library(psych)
+library(lubridate)
+library("readxl")
 
 ## For debugging only
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
 
 # Loading
-library("readxl")
-
 
 
 load.data.frame<-function(keyword.vec){
@@ -53,32 +55,32 @@ load.data.frames<-function(keyword.vec){
   filenames <- list.files("data_hs21", pattern="*.csv", full.names=TRUE)
   ldf <- lapply(filenames, read.csv)
   ldf <- lapply(ldf, convert.to.correct.data.types)
-  as.data.frame(ldf[1])
-  
-  df<- load.data.frame(keyword.vec)
   
   # get google trend for all keywords
-  for (keyword in keyword.vec) {
-    t <-get.google.trend(keyword, as.data.frame(ldf[1]))
-    for (i in 1:length(ldf)){
-      i <-1 
-      # add gtrend
-      ldf[[i]]<-merge(x = ldf[i], 
-                      y = t, 
-                      by.y = c("week", "month",  "year"), 
-                      by.x = c("week", "month",  "year"),
-                      all.x = TRUE)
-      # add yogurt prices
-      ldf[[i]] <-merge(x = ldf[i], y = read.yogurt.data(), by.y = "date", by.x = "date.month" ,  all.x = TRUE)
-      
-      # add milk prices
-      ldf[[i]] <-merge(x = ldf[i], y = read.milk.data(), by.y = "date", by.x = "date.month" ,  all.x = TRUE)
-      
-      # add Mclassi factor and Rest factor
-      ldf[[i]]<-calc_mclassi_rest(ldf[i], df)
-    }
+  df<- load.data.frame(keyword.vec)
+  
+  for (i in 1:length(ldf)){
+    
+    # get the gtrends data
+    gtrends<-df %>%
+      select(c("yrwk_start", "article_name"),gsub(" ", ".", keyword.vec))
+    
+    ldf[[i]] <-merge(x = ldf[i], 
+                     y = gtrends, 
+                     by.y = c("yrwk_start", "article_name"), 
+                     by.x = c("yrwk_start", "article_name") ,  
+                     all.x = TRUE)
+    # add yogurt prices
+    ldf[[i]] <-merge(x = ldf[i], y = read.yogurt.data(), by.y = "date", by.x = "date.month" ,  all.x = TRUE)
+    
+    # add milk prices
+    ldf[[i]] <-merge(x = ldf[i], y = read.milk.data(), by.y = "date", by.x = "date.month" ,  all.x = TRUE)
+    
+    # add Mclassi factor and Rest factor
+    ldf[[i]]<-calc_mclassi_rest(ldf[i], df)
+    ldf[[i]][is.na(ldf[[i]])] <- 0
   }
-  #ldf<-get.google.trend(keyword, as.data.frame(ldf[1]))
+  
   return (ldf)
 }
 
@@ -126,27 +128,6 @@ get.google.trend<-function(keyword, df){
       summarise(mean = mean(est_hits))%>%
       rename(!!gsub(" ", ".", keyword) := mean)
     
-    t
-    #A<-gtrends(keyword,geo="CH",time=paste(start,end,sep=" "))
-    #B<-A$interest_over_time
-    
-    #B <- B %>%
-    #  rename(!!gsub(" ", ".", keyword) := hits)%>%
-    #  select(-keyword,-geo,-time, -gprop, -category)
-    
-    #B$date<-as.Date(B$date, format="%Y-%m-%d")
-    #datalist[[i]] <- B
-    
- 
-    #start <- paste(substr(min(df$yrwk_start),1,8), "01",sep="")
-    #end <- max(df$yrwk_end)
-    #print(paste(start,end,sep=" "))
-  
-  
-  
-    #df<-merge(x = df, y = B, by.y = "date", by.x = "date.month" ,  all.x = TRUE)
-    
-    #print(df)
     return(t)
 }
 
@@ -178,6 +159,7 @@ read.milk.data<-function(){
 
 
 calc_mclassi_rest<-function(df_yogurt, df_all){
+  
   Namen<-names(table(df_all$article_name))
   #split dataframe based on variabe
   
@@ -224,9 +206,6 @@ calc_mclassi_rest<-function(df_yogurt, df_all){
   Tot<-cbind.data.frame(A$sales,B$sales,C$sales,D$sales,E$sales,FF$sales,G$sales,H$sales,I$sales,J$sales,K$sales,L$sales,M$sales,N$sales,O$sales,P$sales,Q$sales,R$sales,S$sales)
   colnames(Tot)<-c("A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S")
   
-  #install.packages("GPArotation")
-  library(psych)
-  
   Tot<-Tot/1000
   
   Faktoren<-fa(Tot,nfactors=2)
@@ -244,9 +223,6 @@ calc_mclassi_rest<-function(df_yogurt, df_all){
 
 
 
-library(gtrendsR)
-library(tidyverse)
-library(lubridate)
 ## http://alexdyachenko.com/all/how-to-get-daily-google-trends-data-for-any-period-with-r/
 get_daily_gtrend <- function(keyword = c('Taylor Swift', 'Kim Kardashian'), geo = 'US', from = '2013-01-01', to = '2019-08-15') {
   if (ymd(to) >= floor_date(Sys.Date(), 'month')) {

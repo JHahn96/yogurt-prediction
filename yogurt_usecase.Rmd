@@ -23,7 +23,7 @@ source("collecting_data.R")
 keyword.vec<-c("Joghurt", "gesund essen")
 
 # union of all yogurts
-df<-load.data.frame(keyword.vec)
+#df<-load.data.frame(keyword.vec)
 
 # list of all yogurts 
 dfs<-load.data.frames(keyword.vec)
