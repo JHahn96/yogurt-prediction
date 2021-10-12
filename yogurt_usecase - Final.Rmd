@@ -166,9 +166,19 @@ for(i in seq(1,length(dfs))){
   
   mod<-lm(y~as.numeric(week)
           +as.numeric(month)
-          +as.numeric(promo_01), data=training)
+          +as.numeric(promo_01)
+          +as.numeric(promo_02)
+          +as.numeric(promo_03)
+          +as.numeric(promo_04)
+          +as.numeric(promo_05)
+          +as.numeric(Joghurt)
+          +as.numeric(gesund.essen)
+          +as.numeric(yogurtpreis)
+          +as.numeric(milchpreis)
+          +as.numeric(year), data=training)
 
-  testingA<-mod$coefficients[1]+mod$coefficients[2]*as.numeric(testing$week)+mod$coefficients[3]*as.numeric(testing$month)+mod$coefficients[4]*as.numeric(testing$promo_01)
+  testingA<-mod$coefficients[1]+mod$coefficients[2]*as.numeric(testing$week)+mod$coefficients[3]*as.numeric(testing$month)+mod$coefficients[4]*as.numeric(testing$promo_01)+
+    mod$coefficients[5]*as.numeric(testing$promo_02)+mod$coefficients[6]*as.numeric(testing$promo_03)+mod$coefficients[7]*as.numeric(testing$promo_04)+mod$coefficients[8]*as.numeric(testing$promo_05)+mod$coefficients[9]*as.numeric(testing$Joghurt)+mod$coefficients[10]*as.numeric(testing$gesund.essen)+mod$coefficients[11]*as.numeric(testing$yogurtpreis)+mod$coefficients[12]*as.numeric(testing$milchpreis)+mod$coefficients[13]*as.numeric(testing$year)
   
   
   training$pred_median <-mod$fitted.values
@@ -183,13 +193,18 @@ for(i in seq(1,length(dfs))){
   
   ###zweites Modell
   fit_glm<-glm(y~ds+ 
-               week + 
+               week +
+               month+
+               year
                milchpreis +
                as.numeric(promo_01)+
                as.numeric(promo_02)+
                as.numeric(promo_03)+
                as.numeric(promo_04)+
-               as.numeric(promo_05),
+               as.numeric(promo_05)+
+               gesund.essen+
+               yogurtpreis+
+               Joghurt,
                data=training,
                family="quasipoisson")
 
