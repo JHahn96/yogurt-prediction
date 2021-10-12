@@ -50,25 +50,51 @@ mape<-function(actual, predicted){
 gesund<-dfs[[1]]$gesund.essen
 Joghurt<-dfs[[1]]$Joghurt
 
+joghurt.price<-dfs[[1]]$kon.yougurtpr.180.fru
+milk.price<-dfs[[1]]$prod.milchpreis.a
+
 #nur jeden vierten Eintrag auswählen
 #gesund<-gesund[seq(1,length(gesund),4)]
 #Joghurt<-Joghurt[seq(1,length(Joghurt),4)]
 
 ntest <- 12 # measurements months, wollen wir hier wirklich nur 3 Monate?
+
 len <- length(gesund)
+
 trainingg<-gesund[c(1:(len-ntest))]
 testingg<-gesund[c((len-ntest+1):len)]
 
 trainingJ<-Joghurt[c(1:(len-ntest))]
 testingJ<-Joghurt[c((len-ntest+1):len)]
 
+trainingJP<-joghurt.price[c(1:(len-ntest))]
+testingJP<-joghurt.price[c((len-ntest+1):len)]
+
+trainingMP<-milk.price[c(1:(len-ntest))]
+testingMP<-milk.price[c((len-ntest+1):len)]
+
 
 library(forecast)
 
-ges<-auto.arima(trainingg, ic = "aic")
-Jog<-auto.arima(trainingg, ic = "aic")
-ges.pred <- predict(ges, n.ahead = 12)
-Jog.pred <- predict(Jog, n.ahead = 12)
+arima.ges<-auto.arima(trainingg, ic = "aic")
+arima.Jog<-auto.arima(trainingJ, ic = "aic")
+arima.JP<-auto.arima(trainingJP, ic = "aic")
+arima.MP<-auto.arima(trainingMP, ic = "aic")
+
+ges.pred <- predict(arima.ges, n.ahead = 12)
+Jog.pred <- predict(arima.Jog, n.ahead = 12)
+JP.pred <- predict(arima.ges, n.ahead = 12)
+MP.pred <- predict(arima.Jog, n.ahead = 12)
+
+checkresiduals(arima.ges)
+checkresiduals(arima.Jog)
+checkresiduals(arima.JP)
+checkresiduals(arima.MP)
+
+ts.pred.joghurt <- c(trainingg, as.numeric(ges.pred$pred))
+ts.pred.gesund <- c(trainingJ, as.numeric(Jog.pred$pred))
+ts.pred.joghurt.price <- c(trainingJP, as.numeric(JP.pred$pred))
+ts.pred.milk.price <- c(trainingMP, as.numeric(MP.pred$pred))
 
 ## TODO vergleich google trends 
 ## MAPE + RMSE
@@ -106,8 +132,18 @@ library(tidyverse)
 library(prophet)
 
 for(i in seq(1,length(dfs))){
-
+  i<-1
+  
+  # replace Null values
   dfs[[i]][is.na(dfs[[i]])] <- 0
+  
+  # add prediction of Gtrends
+  dfs[[i]]["pred.joghurt"]<-ts.pred.joghurt
+  dfs[[i]]["pred.gesund"]<-ts.pred.gesund
+  
+  # add prediction of Gtrends
+  dfs[[i]]["pred.joghurt.price"]<-ts.pred.joghurt.price
+  dfs[[i]]["pred.milk.price"]<-ts.pred.milk.price
   
   df_final<-dfs[[i]]
 
@@ -161,7 +197,7 @@ for(i in seq(1,length(dfs))){
                "yogurtpreis")
 
   ## the test set is the last 4 weeks measured, the training set is everithing else
-  ntest <- 12 # measurements weeks ntest definiere ich weiter oben
+  
   len <- nrow(AL)
   training<-AL[1:(len-ntest),]
   testing<-AL[(len-ntest+1):len,]
