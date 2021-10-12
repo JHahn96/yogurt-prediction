@@ -96,6 +96,11 @@ d_prop2 = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse
 
 d_xgboost = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
 
+d_factorM = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
+
+d_factorR = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
+
+
 
 library(tidyverse)
 library(prophet)
@@ -176,11 +181,8 @@ for(i in seq(1,length(dfs))){
           +as.numeric(yogurtpreis)
           +as.numeric(milchpreis)
           +as.numeric(year), data=training)
-
-  testingA<-mod$coefficients[1]+mod$coefficients[2]*as.numeric(testing$week)+mod$coefficients[3]*as.numeric(testing$month)+mod$coefficients[4]*as.numeric(testing$promo_01)+
-    mod$coefficients[5]*as.numeric(testing$promo_02)+mod$coefficients[6]*as.numeric(testing$promo_03)+mod$coefficients[7]*as.numeric(testing$promo_04)+mod$coefficients[8]*as.numeric(testing$promo_05)+mod$coefficients[9]*as.numeric(testing$Joghurt)+mod$coefficients[10]*as.numeric(testing$gesund.essen)+mod$coefficients[11]*as.numeric(testing$yogurtpreis)+mod$coefficients[12]*as.numeric(testing$milchpreis)+mod$coefficients[13]*as.numeric(testing$year)
   
-  
+  testing$pred_median <- predict(mod, newdata = testing)
   training$pred_median <-mod$fitted.values
   testing$pred_median <-testingA
   
@@ -195,7 +197,7 @@ for(i in seq(1,length(dfs))){
   fit_glm<-glm(y~ds+ 
                week +
                month+
-               year
+               year+
                milchpreis +
                as.numeric(promo_01)+
                as.numeric(promo_02)+
@@ -394,8 +396,141 @@ for(i in seq(1,length(dfs))){
   b <- c(mape(training$y, training$xgboost),mape(testing$y, testing$xgboost))
   c <- c(prod,model,a,b)
   d_xgboost[i, ] = c
+  
+  
+  
+  ####Prophet2 mit factor scores
+  #prophet 2
+  ##wichtig ich ersetze y mit factor scores
+  
+  AL$y<-df_final$MClassi
+  training$y<-AL$y[1:(len-ntest)]
+  testing$y<-AL$y[(len-ntest+1):len]
+
+  m_h_r <- prophet(holidays=s, mcmc_samples=300, 
+                   holidays_prior_scale=0.5, 
+                   changepoint_prior_scale=0.01, 
+                   #seasonality_mode='multiplicative', 
+                   yearly.seasonality=TRUE, 
+                   #weekly.seasonality=TRUE, 
+                   #daily.seasonality=FALSE
+  )
+  
+  
+  m_h_r <- add_regressor(m_h_r, 'promo_01')
+  m_h_r <- add_regressor(m_h_r, "promo_02")
+  m_h_r <- add_regressor(m_h_r, 'promo_03')
+  m_h_r <- add_regressor(m_h_r, "promo_04")
+  m_h_r <- add_regressor(m_h_r, 'promo_05')
+  m_h_r <- add_regressor(m_h_r, "Joghurt")
+  m_h_r <- add_regressor(m_h_r, "gesund.essen")
+  m_h_r <- add_regressor(m_h_r, "yogurtpreis")
+  m_h_r <- add_regressor(m_h_r, "milchpreis")
+  m_h_r <- fit.prophet(m_h_r, training)
+  
+  future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
+  
+  future$promo_01<- AL[,c("promo_01")]
+  future$promo_02<- AL[,c("promo_02")]
+  future$promo_03<- AL[,c("promo_03")]
+  future$promo_04<- AL[,c("promo_04")]
+  future$promo_05<- AL[,c("promo_05")]
+  future$Joghurt<- AL[,c("Joghurt")]
+  future$gesund.essen<- AL[,c("gesund.essen")]
+  future$yogurtpreis<- AL[,c("yogurtpreis")]
+  future$milchpreis<- AL[,c("milchpreis")]
+  
+  fcst_h_r <- predict(m_h_r, future)
+  
+  n<-nrow(training)
+  
+  training$yhat_h_r<-fcst_h_r$yhat[1:n]
+  testing$yhat_h_r<-fcst_h_r$yhat[(n+1):(n+ntest)]
+  
+  sales<-df_final$sales
+  scores<-c(training$y,testing$yhat_h_r)
+  
+  mod<-lm(sales~scores)
+  #diff<-mod$fitted.values-sales
+  
+  c(rmse(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]))
+  c(rmse(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
+  
+  model <- "ProphetScoresM"
+  a <- c(rmse(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]),
+         rmse(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
+  b <- c(mape(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]),
+         mape(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
+  c <- c(prod,model,a,b)
+  d_factorM[i, ] = c
+  
+  
+  ####model factor scores Rest
+  AL$y<-df_final$Rest
+  training$y<-AL$y[1:(len-ntest)]
+  testing$y<-AL$y[(len-ntest+1):len]
+  
+  m_h_r <- prophet(holidays=s, mcmc_samples=300, 
+                   holidays_prior_scale=0.5, 
+                   changepoint_prior_scale=0.01, 
+                   #seasonality_mode='multiplicative', 
+                   yearly.seasonality=TRUE, 
+                   #weekly.seasonality=TRUE, 
+                   #daily.seasonality=FALSE
+  )
+  
+  
+  m_h_r <- add_regressor(m_h_r, 'promo_01')
+  m_h_r <- add_regressor(m_h_r, "promo_02")
+  m_h_r <- add_regressor(m_h_r, 'promo_03')
+  m_h_r <- add_regressor(m_h_r, "promo_04")
+  m_h_r <- add_regressor(m_h_r, 'promo_05')
+  m_h_r <- add_regressor(m_h_r, "Joghurt")
+  m_h_r <- add_regressor(m_h_r, "gesund.essen")
+  m_h_r <- add_regressor(m_h_r, "yogurtpreis")
+  m_h_r <- add_regressor(m_h_r, "milchpreis")
+  m_h_r <- fit.prophet(m_h_r, training)
+  
+  future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
+  
+  future$promo_01<- AL[,c("promo_01")]
+  future$promo_02<- AL[,c("promo_02")]
+  future$promo_03<- AL[,c("promo_03")]
+  future$promo_04<- AL[,c("promo_04")]
+  future$promo_05<- AL[,c("promo_05")]
+  future$Joghurt<- AL[,c("Joghurt")]
+  future$gesund.essen<- AL[,c("gesund.essen")]
+  future$yogurtpreis<- AL[,c("yogurtpreis")]
+  future$milchpreis<- AL[,c("milchpreis")]
+  
+  fcst_h_r <- predict(m_h_r, future)
+  
+  n<-nrow(training)
+  
+  training$yhat_h_r<-fcst_h_r$yhat[1:n]
+  testing$yhat_h_r<-fcst_h_r$yhat[(n+1):(n+ntest)]
+  
+  sales<-df_final$sales
+  scores<-c(training$y,testing$yhat_h_r)
+  
+  mod<-lm(sales~scores)
+  diff<-mod$fitted.values-sales
+  
+  c(rmse(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]))
+  c(rmse(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
+  
+  model <- "prophetScoresR"
+  a <- c(rmse(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]),
+         rmse(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
+  b <- c(mape(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]),
+         mape(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
+  c <- c(prod,model,a,b)
+  d_factorR[i, ] = c
+  
+  
 }
 #d_xgboost
+
 ```
 
 
