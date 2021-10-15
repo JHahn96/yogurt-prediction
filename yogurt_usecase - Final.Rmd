@@ -570,7 +570,6 @@ for(i in seq(1,length(dfs))){
   x<-testing
 }
 
-
 ```
 
 ## Best models for each Yogurt
@@ -582,8 +581,11 @@ y.m.df %>%
   filter(mape_test == max(mape_test))
 ```
 ```{r}
-x <- prediction[1]
-x
+##data frame erstellen mit allen MAPE in testset
+mape_test<-cbind(as.numeric(d_glm$mape_test),as.numeric(d$mape_test),as.numeric(d_prop1$mape_test),as.numeric(d_prop2$mape_test),as.numeric(d_xgboost$mape_test),as.numeric(d_factorM$mape_test),as.numeric(d_factorR$mape_test)) 
+
+colnames(mape_test)<-c("glm","tree","prop1","prop2","xgboost","factorM","factorR")
+rownames(mape_test)<-d_glm[,1]
 ```
 
 
