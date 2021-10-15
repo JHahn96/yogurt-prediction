@@ -109,6 +109,7 @@ Loop
 ###Hier startet der Monsterloop
 ## Zuerst alle dataframes definieren
 library(party)
+library(xgboost)
 
 d_lm = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
 
@@ -127,12 +128,13 @@ d_factorM = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rm
 d_factorR = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
 
 
-
 library(tidyverse)
 library(prophet)
 
+prediction <- list()
+
+
 for(i in seq(1,length(dfs))){
-  #Ni<-1
   
   # replace Null values
   dfs[[i]][is.na(dfs[[i]])] <- 0
@@ -217,6 +219,7 @@ for(i in seq(1,length(dfs))){
           +as.numeric(yogurtpreis)
           +as.numeric(milchpreis)
           +as.numeric(year), data=training)
+  testingA<-mod$coefficients[1]+mod$coefficients[2]*as.numeric(testing$week)+mod$coefficients[3]*as.numeric(testing$month)+mod$coefficients[4]*as.numeric(testing$promo_01)
   
   testing$pred_median <- predict(mod, newdata = testing)
   training$pred_median <-mod$fitted.values
@@ -389,7 +392,7 @@ for(i in seq(1,length(dfs))){
   # --------------------------------------------------------
   
   # XGBOOST
-  library(xgboost)
+ 
   ##We need to provide the x and y variables 
   ## separatetly and in the following format:
   
@@ -563,16 +566,26 @@ for(i in seq(1,length(dfs))){
   c <- c(prod,model,a,b)
   d_factorR[i, ] = c
   
-  
+  prediction[[i]]<-testing
+  x<-testing
 }
-#d_xgboost
 
+```
+
+## Best models for each Yogurt
+```{r}
+y.m.df<-rbind(d_lm, d, d_glm, d_prop1, d_prop2, d_xgboost, d_factorM, d_factorR)
+
+y.m.df %>%
+  group_by(prod) %>%
+  filter(mape_test == max(mape_test))
+```
+```{r}
 ##data frame erstellen mit allen MAPE in testset
 mape_test<-cbind(as.numeric(d_glm$mape_test),as.numeric(d$mape_test),as.numeric(d_prop1$mape_test),as.numeric(d_prop2$mape_test),as.numeric(d_xgboost$mape_test),as.numeric(d_factorM$mape_test),as.numeric(d_factorR$mape_test)) 
 
 colnames(mape_test)<-c("glm","tree","prop1","prop2","xgboost","factorM","factorR")
 rownames(mape_test)<-d_glm[,1]
-
 ```
 
 
