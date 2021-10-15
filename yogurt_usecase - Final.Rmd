@@ -207,22 +207,25 @@ for(i in seq(1,length(dfs))){
   c(min(training$ds), max(training$ds))
   c(min(testing$ds), max(testing$ds))
   
-  mod<-lm(y~as.numeric(week)
-          +as.numeric(month)
-          +as.numeric(promo_01)
-          +as.numeric(promo_02)
+  mod<-lm(y~ds+
+            week+
+            month+
+            year+
+            as.numeric(promo_01)+
+            as.numeric(promo_02)
           +as.numeric(promo_03)
           +as.numeric(promo_04)
           +as.numeric(promo_05)
-          +as.numeric(Joghurt)
-          +as.numeric(gesund.essen)
-          +as.numeric(yogurtpreis)
-          +as.numeric(milchpreis)
-          +as.numeric(year), data=training)
+          +Joghurt
+          +gesund.essen
+          +yogurtpreis
+          +milchpreis, data=training)
   testingA<-mod$coefficients[1]+mod$coefficients[2]*as.numeric(testing$week)+mod$coefficients[3]*as.numeric(testing$month)+mod$coefficients[4]*as.numeric(testing$promo_01)
   
   testing$pred_median <- predict(mod, newdata = testing)
   training$pred_median <-mod$fitted.values
+  
+
   
   
   prod <- df_final$article_name[1]
@@ -578,7 +581,7 @@ y.m.df<-rbind(d_lm, d, d_glm, d_prop1, d_prop2, d_xgboost, d_factorM, d_factorR)
 
 y.m.df %>%
   group_by(prod) %>%
-  filter(mape_test == max(mape_test))
+  filter(mape_test == min(mape_test))
 ```
 ```{r}
 ##data frame erstellen mit allen MAPE in testset
@@ -586,6 +589,17 @@ mape_test<-cbind(as.numeric(d_lm$mape_test),as.numeric(d_glm$mape_test),as.numer
 
 colnames(mape_test)<-c("lm","glm","tree","prop1","prop2","xgboost","factorM","factorR")
 rownames(mape_test)<-d_glm[,1]
+
+#mape_test<-cbind(as.numeric(d_glm$mape_test),as.numeric(d$mape_test),as.numeric(d_prop1$mape_test),as.numeric(d_prop2$mape_test),as.numeric(d_xgboost$mape_test),as.numeric(d_factorM$mape_test),as.numeric(d_factorR$mape_test)) 
+
+#colnames(mape_test)<-c("glm","tree","prop1","prop2","xgboost","factorM","factorR")
+#rownames(mape_test)<-d_glm[,1]
+
+min<-apply(mape_test, 1, FUN = min)
+a<-mape_test==min
+colSums(a)
+
+
 ```
 
 
