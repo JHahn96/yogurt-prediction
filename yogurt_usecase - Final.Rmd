@@ -577,12 +577,16 @@ for(i in seq(1,length(dfs))){
 
 ## Best models for each Yogurt
 ```{r}
-y.m.df<-rbind(d_lm, d, d_glm, d_prop1, d_prop2, d_xgboost, d_factorM, d_factorR)
+## create mape data frame of all models
+## set correct data type (char to number)
+y.m.df<-rbind(d_lm, d, d_glm, d_prop1, d_prop2, d_xgboost, d_factorM, d_factorR)%>% 
+  retype()
 
 y.m.df %>%
   group_by(prod) %>%
   filter(mape_test == min(mape_test))
 ```
+
 ```{r}
 ##data frame erstellen mit allen MAPE in testset
 mape_test<-cbind(as.numeric(d_lm$mape_test),as.numeric(d_glm$mape_test),as.numeric(d$mape_test),as.numeric(d_prop1$mape_test),as.numeric(d_prop2$mape_test),as.numeric(d_xgboost$mape_test),as.numeric(d_factorM$mape_test),as.numeric(d_factorR$mape_test)) 
