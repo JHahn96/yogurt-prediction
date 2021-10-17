@@ -1,6 +1,6 @@
 ---
-title: "Data Science in Healthcare"
-author: "Natalie Borter, Pascal Humbel, Jonathan Hahn"
+title: "Predicting MIGROS Yogurt Sales"
+author: "Natalie Borter, Jonathan Hahn"
 date: "18.01.2021"
 output: html_document;
         pdf_document
@@ -103,13 +103,19 @@ ts.pred.milk.price <- c(trainingMP, as.numeric(MP.pred$pred))
 ## Milchpreise und Joghurtpreise
 ```
 
-Loop
+## Apply each model to each yogurt
+
+A loop that applies each model to each yoghurt.
+The relevant data is stored for comparison.
 
 ```{r prepare_data, warning=FALSE, message=FALSE}
-###Hier startet der Monsterloop
-## Zuerst alle dataframes definieren
 library(party)
+library(prophet)
+library(tidyverse)
 library(xgboost)
+
+
+## Define data frame for each modell
 
 d_lm = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
 
@@ -127,14 +133,11 @@ d_factorM = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rm
 
 d_factorR = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
 
-
-library(tidyverse)
-library(prophet)
-
 prediction <- list()
 
-
 for(i in seq(1,length(dfs))){
+  
+  #i <-1
   
   # replace Null values
   dfs[[i]][is.na(dfs[[i]])] <- 0
@@ -220,18 +223,19 @@ for(i in seq(1,length(dfs))){
           +gesund.essen
           +yogurtpreis
           +milchpreis, data=training)
+  
   testingA<-mod$coefficients[1]+mod$coefficients[2]*as.numeric(testing$week)+mod$coefficients[3]*as.numeric(testing$month)+mod$coefficients[4]*as.numeric(testing$promo_01)
   
-  testing$pred_median <- predict(mod, newdata = testing)
-  training$pred_median <-mod$fitted.values
+  testing$pred_lm <- predict(mod, newdata = testing)
+  training$pred_lm <-mod$fitted.values
   
 
   
   
   prod <- df_final$article_name[1]
   model <- "lin1"
-  a <- c(rmse(training$y, training$pred_median),rmse(testing$y, testing$pred_median))
-  b <- c(mape(training$y, training$pred_median),mape(testing$y, testing$pred_median))
+  a <- c(rmse(training$y, training$pred_lm),rmse(testing$y, testing$pred_lm))
+  b <- c(mape(training$y, training$pred_lm),mape(testing$y, testing$pred_lm))
   c <- c(prod,model,a,b)
   d_lm[i, ] = c
   
@@ -252,8 +256,8 @@ for(i in seq(1,length(dfs))){
                data=training,
                family="quasipoisson")
 
-  training$pred_glm <- predict(fit_glm)
-  testing$pred_glm <- predict(fit_glm, newdata = testing)
+  training$pred_glm <-  exp(predict(fit_glm))
+  testing$pred_glm <-  exp(predict(fit_glm, newdata = testing))
 
   model <- "model_GLM"
   a_glm <- c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)))
@@ -320,14 +324,14 @@ for(i in seq(1,length(dfs))){
   future <- make_future_dataframe(m, periods = ntest, freq = "week", include_history = TRUE)
   fcst <- predict(m, future)
   n<-nrow(training)
-  training$yhat<-fcst$yhat[1:n]
-  testing$yhat<-fcst$yhat[(n+1):(n+ntest)]
+  training$pred_prophet1<-fcst$yhat[1:n]
+  testing$pred_prophet1<-fcst$yhat[(n+1):(n+ntest)]
   
   
   
   model <- "Prophet1"
-  a <- c(rmse(training$y, training$yhat),rmse(testing$y, testing$yhat))
-  b <- c(mape(training$y, training$yhat),mape(testing$y, testing$yhat))
+  a <- c(rmse(training$y, training$pred_prophet1),rmse(testing$y, testing$pred_prophet1))
+  b <- c(mape(training$y, training$pred_prophet1),mape(testing$y, testing$pred_prophet1))
   c <- c(prod,model,a,b)
   d_prop1[i, ] = c
   
@@ -373,20 +377,13 @@ for(i in seq(1,length(dfs))){
 
   n<-nrow(training)
 
-  training$yhat_h_r<-fcst_h_r$yhat[1:n]
-  testing$yhat_h_r<-fcst_h_r$yhat[(n+1):(n+ntest)]
-  
-  #a<-training$yhat_h_r<5
-  #training$yhat_h_r[a]<-5
-  
-  #b<-testing$yhat_h_r<5
-  #testing$yhat_h_r[b]<-5
-
+  training$pred_prophet2<-fcst_h_r$yhat[1:n]
+  testing$pred_prophet2<-fcst_h_r$yhat[(n+1):(n+ntest)]
   
   
   model <- "Prophet2"
-  a <- c(rmse(training$y, training$yhat_h_r),rmse(testing$y, testing$yhat_h_r))
-  b <- c(mape(training$y, training$yhat_h_r),mape(testing$y, testing$yhat_h_r))
+  a <- c(rmse(training$y, training$pred_prophet2),rmse(testing$y, testing$pred_prophet2))
+  b <- c(mape(training$y, training$pred_prophet2),mape(testing$y, testing$pred_prophet2))
   c <- c(prod,model,a,b)
   d_prop2[i, ] = c
   
@@ -416,9 +413,9 @@ for(i in seq(1,length(dfs))){
                      nrounds=70, objective = "count:poisson")
   
   ##Make predictions on training data
-  pred_gbt_train = predict(fit.gbt, X[1:(len-ntest),])
+  pred_gbt_train <- predict(fit.gbt, X[1:(len-ntest),])
   ##Make predictions on test data
-  pred_gbt_test = predict(fit.gbt, X[(len-ntest+1):len,])
+  pred_gbt_test <- predict(fit.gbt, X[(len-ntest+1):len,])
   
   ##Which variables are important?
   #require(ggplot2)
@@ -426,11 +423,11 @@ for(i in seq(1,length(dfs))){
   #importance=xgb.importance(colnames(X), model = fit.gbt)
   #xgb.ggplot.importance(importance)
   
-  training$xgboost<-pred_gbt_train
-  testing$xgboost<-pred_gbt_test
+  training$pred_xgboost<-pred_gbt_train
+  testing$pred_xgboost<-pred_gbt_test
   
-  c(rmse(training$y, training$xgboost),rmse(testing$y, testing$xgboost))
-  c(mape(training$y, training$xgboost),mape(testing$y, testing$xgboost))
+  c(rmse(training$y, training$pred_xgboost),rmse(testing$y, testing$pred_xgboost))
+  c(mape(training$y, training$pred_xgboost),mape(testing$y, testing$pred_xgboost))
   
   
   model <- "XGBOOST"
@@ -445,9 +442,9 @@ for(i in seq(1,length(dfs))){
   #prophet 2
   ##wichtig ich ersetze y mit factor scores
   
-  AL$y<-df_final$MClassi
-  training$y<-AL$y[1:(len-ntest)]
-  testing$y<-AL$y[(len-ntest+1):len]
+  AL$y.MCLASSI<-df_final$MClassi
+  training$y<-AL$y.MCLASSI[1:(len-ntest)]
+  testing$y<-AL$y.MCLASSI[(len-ntest+1):len]
 
   m_h_r <- prophet(holidays=s, mcmc_samples=300, 
                    holidays_prior_scale=0.5, 
@@ -486,11 +483,11 @@ for(i in seq(1,length(dfs))){
   
   n<-nrow(training)
   
-  training$yhat_h_r<-fcst_h_r$yhat[1:n]
-  testing$yhat_h_r<-fcst_h_r$yhat[(n+1):(n+ntest)]
+  training$pred_ProphetScoresM<-fcst_h_r$yhat[1:n]
+  testing$pred_ProphetScoresM<-fcst_h_r$yhat[(n+1):(n+ntest)]
   
   sales<-df_final$sales
-  scores<-c(training$y,testing$yhat_h_r)
+  scores<-c(training$y,testing$pred_ProphetScoresM)
   
   mod<-lm(sales~scores)
   #diff<-mod$fitted.values-sales
@@ -508,9 +505,9 @@ for(i in seq(1,length(dfs))){
   
   
   ####model factor scores Rest
-  AL$y<-df_final$Rest
-  training$y<-AL$y[1:(len-ntest)]
-  testing$y<-AL$y[(len-ntest+1):len]
+  AL$y.Rest<-df_final$Rest
+  training$y<-AL$y.Rest[1:(len-ntest)]
+  testing$y<-AL$y.Rest[(len-ntest+1):len]
   
   m_h_r <- prophet(holidays=s, mcmc_samples=300, 
                    holidays_prior_scale=0.5, 
@@ -549,11 +546,11 @@ for(i in seq(1,length(dfs))){
   
   n<-nrow(training)
   
-  training$yhat_h_r<-fcst_h_r$yhat[1:n]
-  testing$yhat_h_r<-fcst_h_r$yhat[(n+1):(n+ntest)]
+  training$pred_ProphetScoresRest<-fcst_h_r$yhat[1:n]
+  testing$pred_ProphetScoresRest<-fcst_h_r$yhat[(n+1):(n+ntest)]
   
   sales<-df_final$sales
-  scores<-c(training$y,testing$yhat_h_r)
+  scores<-c(training$y,testing$pred_ProphetScoresRest)
   
   mod<-lm(sales~scores)
   diff<-mod$fitted.values-sales
@@ -569,14 +566,21 @@ for(i in seq(1,length(dfs))){
   c <- c(prod,model,a,b)
   d_factorR[i, ] = c
   
+  # overwrite from prophet again 
+  
+  training$y<-df_final$sales[1:(len-ntest)]
+  testing$y<-df_final$sales[(len-ntest+1):len]
+  
   prediction[[i]]<-testing
-  x<-testing
+  
 }
 
 ```
 
 ## Best models for each Yogurt
 ```{r}
+x
+prediction[[i]]
 ## create mape data frame of all models
 ## set correct data type (char to number)
 y.m.df<-rbind(d_lm, d, d_glm, d_prop1, d_prop2, d_xgboost, d_factorM, d_factorR)%>% 
@@ -586,6 +590,57 @@ y.m.df %>%
   group_by(prod) %>%
   filter(mape_test == min(mape_test))
 ```
+
+
+## Plot predictions
+
+```{r}
+
+for(i in seq(1,length(prediction))){
+  #i <-3
+  
+  yogurt <- dfs[[i]]$article_name[1]
+  
+  testqstat<- data.table::melt(prediction[[i]], id="ds", measure=c("pred_prophet1", 
+                                                           "pred_prophet2", 
+                                                           "pred_glm", 
+                                                           "pred_xgboost"))
+  
+  model_names<- c(
+    'pred_prophet1' = sprintf("Prophet 1 \n MAPE: %.2f (Train) - %.2f (Test)",
+                     mape(training$y, training$pred_prophet1),
+                     mape(testing$y, testing$pred_prophet1)),
+    
+    'pred_prophet2' = sprintf(
+      "Prophet 2 \n MAPE: %.2f (Train) - %.2f (Test)",
+                     mape(training$y, training$pred_prophet2),
+                     mape(testing$y, testing$pred_prophet2)),
+    
+    'pred_glm' = sprintf("GLM \n  MAPE: %.2f (Train) - %.2f (Test)",
+                     mape(training$y, training$pred_glm),
+                     mape(testing$y, testing$pred_glm)),  
+    
+    'pred_xgboost' = sprintf("XGBoosting \n MAPE: %.2f (Train) - %.2f (Test)",
+                     mape(training$y, training$pred_xgboost),
+                     mape(testing$y, testing$pred_xgboost))
+  )
+  
+  g1 <- ggplot(aes(y=value, x=ds, color=variable), data=testqstat) +
+    
+    xlim(min(testing$ds), max(testing$ds))+
+    geom_line(data = testing, aes(y=y), color="grey70") +
+    geom_line() +
+    facet_wrap(~variable, ncol=2, labeller = as_labeller(model_names))+
+    theme(axis.text = element_text(size=5), axis.title = element_text(size=6)) +
+    labs(title=paste(c("Modelcomparison of ", yogurt, ", with MAPE Statistics."), collapse="",sep=""),  
+         x="Time", y="Yogurt Sales")+ 
+    theme(legend.position = "none")
+  print(g1)
+}
+```
+
+
+
 
 ```{r}
 ##data frame erstellen mit allen MAPE in testset
