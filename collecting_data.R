@@ -250,10 +250,10 @@ get_daily_gtrend <- function(keyword = c('Taylor Swift', 'Kim Kardashian'), geo 
   
   for (i in seq(1, nrow(pm), 1)) {
     curr <- gtrends(keyword, geo = geo, time = paste(pm$s[i], pm$e[i]))
-    print(paste('for', pm$s[i], pm$e[i], 'retrieved', count(curr$interest_over_time), 'days of data (all keywords)'))
+    print(paste('for', pm$s[i], pm$e[i], 'retrieved data (all keywords)'))
     raw_trends_m <- rbind(raw_trends_m,
                           curr$interest_over_time)
-    Sys.sleep(.2)
+    Sys.sleep(.1)
   }
   
   trend_m <- raw_trends_m %>%
