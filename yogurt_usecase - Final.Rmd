@@ -463,10 +463,10 @@ for(i in seq(1,length(dfs))){
   m_h_r <- add_regressor(m_h_r, 'promo_03')
   m_h_r <- add_regressor(m_h_r, "promo_04")
   m_h_r <- add_regressor(m_h_r, 'promo_05')
-  m_h_r <- add_regressor(m_h_r, "pred.joghurt")
-  m_h_r <- add_regressor(m_h_r, "pred.gesund")
-  m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
-  m_h_r <- add_regressor(m_h_r, "pred.milk.price")
+  #m_h_r <- add_regressor(m_h_r, "pred.joghurt")
+  #m_h_r <- add_regressor(m_h_r, "pred.gesund")
+  #m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
+  #m_h_r <- add_regressor(m_h_r, "pred.milk.price")
   m_h_r <- fit.prophet(m_h_r, training)
   
   future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
@@ -476,10 +476,10 @@ for(i in seq(1,length(dfs))){
   future$promo_03<- AL[,c("promo_03")]
   future$promo_04<- AL[,c("promo_04")]
   future$promo_05<- AL[,c("promo_05")]
-  future$pred.joghurt<- AL[,c("pred.joghurt")]
-  future$pred.gesund<- AL[,c("pred.gesund")]
-  future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
-  future$pred.milk.price<- AL[,c("pred.milk.price")]
+  #future$pred.joghurt<- AL[,c("pred.joghurt")]
+  #future$pred.gesund<- AL[,c("pred.gesund")]
+  #future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
+  #future$pred.milk.price<- AL[,c("pred.milk.price")]
   
   fcst_h_r <- predict(m_h_r, future)
   
@@ -493,6 +493,8 @@ for(i in seq(1,length(dfs))){
   
   mod<-lm(sales~scores)
   #diff<-mod$fitted.values-sales
+  training$pred_ProphetScoresM<-mod$fitted.values[1:(len-ntest)]
+  testing$pred_ProphetScoresM<-mod$fitted.values[(len-ntest+1):len]
   
   c(rmse(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]))
   c(rmse(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
@@ -525,10 +527,10 @@ for(i in seq(1,length(dfs))){
   m_h_r <- add_regressor(m_h_r, 'promo_03')
   m_h_r <- add_regressor(m_h_r, "promo_04")
   m_h_r <- add_regressor(m_h_r, 'promo_05')
-  m_h_r <- add_regressor(m_h_r, "pred.joghurt")
-  m_h_r <- add_regressor(m_h_r, "pred.gesund")
-  m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
-  m_h_r <- add_regressor(m_h_r, "pred.milk.price")
+  #m_h_r <- add_regressor(m_h_r, "pred.joghurt")
+  #m_h_r <- add_regressor(m_h_r, "pred.gesund")
+  #m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
+  #m_h_r <- add_regressor(m_h_r, "pred.milk.price")
   m_h_r <- fit.prophet(m_h_r, training)
   
   future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
@@ -538,10 +540,10 @@ for(i in seq(1,length(dfs))){
   future$promo_03<- AL[,c("promo_03")]
   future$promo_04<- AL[,c("promo_04")]
   future$promo_05<- AL[,c("promo_05")]
-  future$pred.joghurt<- AL[,c("pred.joghurt")]
-  future$pred.gesund<- AL[,c("pred.gesund")]
-  future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
-  future$pred.milk.price<- AL[,c("pred.milk.price")]
+  #future$pred.joghurt<- AL[,c("pred.joghurt")]
+  #future$pred.gesund<- AL[,c("pred.gesund")]
+  #future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
+  #future$pred.milk.price<- AL[,c("pred.milk.price")]
   
   fcst_h_r <- predict(m_h_r, future)
   
@@ -555,6 +557,9 @@ for(i in seq(1,length(dfs))){
   
   mod<-lm(sales~scores)
   diff<-mod$fitted.values-sales
+  
+  training$pred_ProphetScoresRest<-mod$fitted.values[1:(len-ntest)]
+  testing$pred_ProphetScoresRest<-mod$fitted.values[(len-ntest+1):len]
   
   model <- "prophetScoresR"
   a <- c(rmse(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]),
@@ -570,7 +575,7 @@ for(i in seq(1,length(dfs))){
   testing$y<-df_final$sales[(len-ntest+1):len]
   
   prediction[[i]]<-testing
-  print("All modells predicted for ", prod)
+  print(c("All modells predicted for ", prod))
 }
 
 ```
@@ -599,14 +604,14 @@ for(i in seq(1,length(prediction))){
   
   testing<-prediction[[i]]
   
-  testqstat<- data.table::melt(prediction[[i]], id="ds", measure=c("pred_prophet1", 
+  testqstat<- data.table::melt(prediction[[i]], id="ds", measure=c("pred_ProphetScoresM", 
                                                            "pred_prophet2", 
                                                            "pred_glm", 
                                                            "pred_xgboost"))
   model_names<- c(
-    'pred_prophet1' = sprintf("Prophet 1 \n MAPE: %.2f (Train) - %.2f (Test)",
-                     mape(training$y, training$pred_prophet1),
-                     mape(testing$y, testing$pred_prophet1)),
+    'pred_ProphetScoresM' = sprintf("ProphetScoresM \n MAPE: %.2f (Train) - %.2f (Test)",
+                     mape(training$y, training$pred_ProphetScoresM),
+                     mape(testing$y, testing$pred_pred_ProphetScoresM)),
     
     'pred_prophet2' = sprintf(
       "Prophet 2 \n MAPE: %.2f (Train) - %.2f (Test)",
