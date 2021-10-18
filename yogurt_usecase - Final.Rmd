@@ -23,7 +23,6 @@ keyword.vec<-c("Joghurt", "gesund essen")
 
 # list of all yogurts with own data frame for each yogurt
 dfs<-load.data.frames(keyword.vec)
-z<-dfs[[1]]
 
 ```
 
@@ -260,8 +259,8 @@ for(i in seq(1,length(dfs))){
   testing$pred_glm <-  exp(predict(fit_glm, newdata = testing))
 
   model <- "model_GLM"
-  a_glm <- c(rmse(training$y, exp(training$pred_glm)),rmse(testing$y, exp(testing$pred_glm)))
-  b_glm <- c(mape(training$y, exp(training$pred_glm)),mape(testing$y, exp(testing$pred_glm)))
+  a_glm <- c(rmse(training$y, training$pred_glm),rmse(testing$y, testing$pred_glm))
+  b_glm <- c(mape(training$y, training$pred_glm),mape(testing$y, testing$pred_glm))
   c_glm <- c(prod,model,a_glm,b_glm)
   d_glm[i, ] = c_glm
   print(c_glm)
@@ -431,8 +430,8 @@ for(i in seq(1,length(dfs))){
   
   
   model <- "XGBOOST"
-  a <- c(rmse(training$y, training$xgboost),rmse(testing$y, testing$xgboost))
-  b <- c(mape(training$y, training$xgboost),mape(testing$y, testing$xgboost))
+  a <- c(rmse(training$y, training$pred_xgboost),rmse(testing$y, testing$pred_xgboost))
+  b <- c(mape(training$y, training$pred_xgboost),mape(testing$y, testing$pred_xgboost))
   c <- c(prod,model,a,b)
   d_xgboost[i, ] = c
   
@@ -579,8 +578,6 @@ for(i in seq(1,length(dfs))){
 
 ## Best models for each Yogurt
 ```{r}
-x
-prediction[[i]]
 ## create mape data frame of all models
 ## set correct data type (char to number)
 y.m.df<-rbind(d_lm, d, d_glm, d_prop1, d_prop2, d_xgboost, d_factorM, d_factorR)%>% 
