@@ -113,7 +113,7 @@ library(prophet)
 library(tidyverse)
 library(xgboost)
 
-
+set.seed(123)
 ## Define data frame for each modell
 
 d_lm = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
@@ -135,8 +135,6 @@ d_factorR = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rm
 prediction <- list()
 
 for(i in seq(1,length(dfs))){
-  
-  #i <-1
   
   # replace Null values
   dfs[[i]][is.na(dfs[[i]])] <- 0
@@ -181,10 +179,11 @@ for(i in seq(1,length(dfs))){
                   "promo_03", 
                   "promo_04", 
                   "promo_05",
-                  "Joghurt",
-                  "gesund.essen",
-                  "prod.milchpreis.a",
-                  "kon.yougurtpr.180.fru")]
+                  "pred.joghurt",
+                  "pred.gesund",
+                  "pred.joghurt.price",
+                  "pred.milk.price")]
+  
   names(AL)<-c("ds",
                "y",
                "year",
@@ -195,10 +194,10 @@ for(i in seq(1,length(dfs))){
                "promo_03",
                "promo_04",
                "promo_05",
-               "Joghurt",
-               "gesund.essen",
-               "milchpreis",
-               "yogurtpreis")
+               "pred.joghurt",
+               "pred.gesund",
+               "pred.joghurt.price",
+               "pred.milk.price")
 
   ## the test set is the last 4 weeks measured, the training set is everithing else
   
@@ -218,10 +217,11 @@ for(i in seq(1,length(dfs))){
           +as.numeric(promo_03)
           +as.numeric(promo_04)
           +as.numeric(promo_05)
-          +Joghurt
-          +gesund.essen
-          +yogurtpreis
-          +milchpreis, data=training)
+          +pred.joghurt
+          +pred.gesund
+          +pred.joghurt.price
+          +pred.milk.price
+          +pred.milk.price, data=training)
   
   testingA<-mod$coefficients[1]+mod$coefficients[2]*as.numeric(testing$week)+mod$coefficients[3]*as.numeric(testing$month)+mod$coefficients[4]*as.numeric(testing$promo_01)
   
@@ -243,15 +243,15 @@ for(i in seq(1,length(dfs))){
                week +
                month+
                year+
-               milchpreis +
                as.numeric(promo_01)+
                as.numeric(promo_02)+
                as.numeric(promo_03)+
                as.numeric(promo_04)+
                as.numeric(promo_05)+
-               gesund.essen+
-               yogurtpreis+
-               Joghurt,
+               pred.joghurt
+               +pred.gesund
+               +pred.joghurt.price
+               +pred.milk.price,
                data=training,
                family="quasipoisson")
 
@@ -263,7 +263,7 @@ for(i in seq(1,length(dfs))){
   b_glm <- c(mape(training$y, training$pred_glm),mape(testing$y, testing$pred_glm))
   c_glm <- c(prod,model,a_glm,b_glm)
   d_glm[i, ] = c_glm
-  print(c_glm)
+  #print(c_glm)
   
   #--------------------------------------------------------------------------------------------------------
   # tree with party
@@ -276,11 +276,11 @@ for(i in seq(1,length(dfs))){
                   promo_02+
                   promo_03+
                   promo_04+
-                  promo_05+
-                  Joghurt+
-                  gesund.essen+
-                  yogurtpreis+
-                  milchpreis,
+                  promo_05
+                  +pred.joghurt
+                  +pred.gesund
+                  +pred.joghurt.price
+                  +pred.milk.price,
                   data=training)
   
   # show tree
@@ -295,7 +295,7 @@ for(i in seq(1,length(dfs))){
   b <- c(mape(training$y, training$pred_tree),mape(testing$y, testing$pred_tree))
   c <- c(prod,model,a,b)
   d[i, ] = c
-  print(c)
+  #print(c)
   
   
   ##holidays richtig spezifizieren; jeweils eine Woche lang, damit unser Tag enthalen ist
@@ -348,16 +348,15 @@ for(i in seq(1,length(dfs))){
              #daily.seasonality=FALSE
              )
 
-
   m_h_r <- add_regressor(m_h_r, 'promo_01')
   m_h_r <- add_regressor(m_h_r, "promo_02")
   m_h_r <- add_regressor(m_h_r, 'promo_03')
   m_h_r <- add_regressor(m_h_r, "promo_04")
   m_h_r <- add_regressor(m_h_r, 'promo_05')
-  m_h_r <- add_regressor(m_h_r, "Joghurt")
-  m_h_r <- add_regressor(m_h_r, "gesund.essen")
-  m_h_r <- add_regressor(m_h_r, "yogurtpreis")
-  m_h_r <- add_regressor(m_h_r, "milchpreis")
+  m_h_r <- add_regressor(m_h_r, "pred.joghurt")
+  m_h_r <- add_regressor(m_h_r, "pred.gesund")
+  m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
+  m_h_r <- add_regressor(m_h_r, "pred.milk.price")
   m_h_r <- fit.prophet(m_h_r, training)
   
   future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
@@ -367,11 +366,11 @@ for(i in seq(1,length(dfs))){
   future$promo_03<- AL[,c("promo_03")]
   future$promo_04<- AL[,c("promo_04")]
   future$promo_05<- AL[,c("promo_05")]
-  future$Joghurt<- AL[,c("Joghurt")]
-  future$gesund.essen<- AL[,c("gesund.essen")]
-  future$yogurtpreis<- AL[,c("yogurtpreis")]
-  future$milchpreis<- AL[,c("milchpreis")]
-
+  future$pred.joghurt<- AL[,c("pred.joghurt")]
+  future$pred.gesund<- AL[,c("pred.gesund")]
+  future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
+  future$pred.milk.price<- AL[,c("pred.milk.price")]
+  
   fcst_h_r <- predict(m_h_r, future)
 
   n<-nrow(training)
@@ -395,9 +394,11 @@ for(i in seq(1,length(dfs))){
   ##We need to provide the x and y variables 
   ## separatetly and in the following format:
   
-  training
+  #training
   X <- AL%>%
-    select(-y, -ds)%>% 
+    select(-y, 
+           -ds
+           )%>% 
     mutate(across(where(is.factor), as.numeric))%>%
     as.matrix(.)
   
@@ -408,8 +409,11 @@ for(i in seq(1,length(dfs))){
     as.matrix(.)
   
   ##Train model
-  fit.gbt <- xgboost(data = X_train, label = y,
-                     nrounds=70, objective = "count:poisson")
+  fit.gbt <- xgboost(data = X_train, 
+                     label = y,
+                     nrounds=60, 
+                     objective = "count:poisson",
+                     verbose = 0)
   
   ##Make predictions on training data
   pred_gbt_train <- predict(fit.gbt, X[1:(len-ntest),])
@@ -454,29 +458,28 @@ for(i in seq(1,length(dfs))){
                    #daily.seasonality=FALSE
   )
   
-  
   m_h_r <- add_regressor(m_h_r, 'promo_01')
   m_h_r <- add_regressor(m_h_r, "promo_02")
   m_h_r <- add_regressor(m_h_r, 'promo_03')
   m_h_r <- add_regressor(m_h_r, "promo_04")
   m_h_r <- add_regressor(m_h_r, 'promo_05')
-  m_h_r <- add_regressor(m_h_r, "Joghurt")
-  m_h_r <- add_regressor(m_h_r, "gesund.essen")
-  m_h_r <- add_regressor(m_h_r, "yogurtpreis")
-  m_h_r <- add_regressor(m_h_r, "milchpreis")
+  m_h_r <- add_regressor(m_h_r, "pred.joghurt")
+  m_h_r <- add_regressor(m_h_r, "pred.gesund")
+  m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
+  m_h_r <- add_regressor(m_h_r, "pred.milk.price")
   m_h_r <- fit.prophet(m_h_r, training)
   
   future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
-  
+ 
   future$promo_01<- AL[,c("promo_01")]
   future$promo_02<- AL[,c("promo_02")]
   future$promo_03<- AL[,c("promo_03")]
   future$promo_04<- AL[,c("promo_04")]
   future$promo_05<- AL[,c("promo_05")]
-  future$Joghurt<- AL[,c("Joghurt")]
-  future$gesund.essen<- AL[,c("gesund.essen")]
-  future$yogurtpreis<- AL[,c("yogurtpreis")]
-  future$milchpreis<- AL[,c("milchpreis")]
+  future$pred.joghurt<- AL[,c("pred.joghurt")]
+  future$pred.gesund<- AL[,c("pred.gesund")]
+  future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
+  future$pred.milk.price<- AL[,c("pred.milk.price")]
   
   fcst_h_r <- predict(m_h_r, future)
   
@@ -517,16 +520,15 @@ for(i in seq(1,length(dfs))){
                    #daily.seasonality=FALSE
   )
   
-  
   m_h_r <- add_regressor(m_h_r, 'promo_01')
   m_h_r <- add_regressor(m_h_r, "promo_02")
   m_h_r <- add_regressor(m_h_r, 'promo_03')
   m_h_r <- add_regressor(m_h_r, "promo_04")
   m_h_r <- add_regressor(m_h_r, 'promo_05')
-  m_h_r <- add_regressor(m_h_r, "Joghurt")
-  m_h_r <- add_regressor(m_h_r, "gesund.essen")
-  m_h_r <- add_regressor(m_h_r, "yogurtpreis")
-  m_h_r <- add_regressor(m_h_r, "milchpreis")
+  m_h_r <- add_regressor(m_h_r, "pred.joghurt")
+  m_h_r <- add_regressor(m_h_r, "pred.gesund")
+  m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
+  m_h_r <- add_regressor(m_h_r, "pred.milk.price")
   m_h_r <- fit.prophet(m_h_r, training)
   
   future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
@@ -536,10 +538,10 @@ for(i in seq(1,length(dfs))){
   future$promo_03<- AL[,c("promo_03")]
   future$promo_04<- AL[,c("promo_04")]
   future$promo_05<- AL[,c("promo_05")]
-  future$Joghurt<- AL[,c("Joghurt")]
-  future$gesund.essen<- AL[,c("gesund.essen")]
-  future$yogurtpreis<- AL[,c("yogurtpreis")]
-  future$milchpreis<- AL[,c("milchpreis")]
+  future$pred.joghurt<- AL[,c("pred.joghurt")]
+  future$pred.gesund<- AL[,c("pred.gesund")]
+  future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
+  future$pred.milk.price<- AL[,c("pred.milk.price")]
   
   fcst_h_r <- predict(m_h_r, future)
   
@@ -553,9 +555,6 @@ for(i in seq(1,length(dfs))){
   
   mod<-lm(sales~scores)
   diff<-mod$fitted.values-sales
-  
-  c(rmse(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]))
-  c(rmse(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
   
   model <- "prophetScoresR"
   a <- c(rmse(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]),
@@ -571,7 +570,7 @@ for(i in seq(1,length(dfs))){
   testing$y<-df_final$sales[(len-ntest+1):len]
   
   prediction[[i]]<-testing
-  
+  print("All modells predicted for ", prod)
 }
 
 ```
@@ -598,11 +597,12 @@ for(i in seq(1,length(prediction))){
   
   yogurt <- dfs[[i]]$article_name[1]
   
+  testing<-prediction[[i]]
+  
   testqstat<- data.table::melt(prediction[[i]], id="ds", measure=c("pred_prophet1", 
                                                            "pred_prophet2", 
                                                            "pred_glm", 
                                                            "pred_xgboost"))
-  
   model_names<- c(
     'pred_prophet1' = sprintf("Prophet 1 \n MAPE: %.2f (Train) - %.2f (Test)",
                      mape(training$y, training$pred_prophet1),
@@ -621,7 +621,7 @@ for(i in seq(1,length(prediction))){
                      mape(training$y, training$pred_xgboost),
                      mape(testing$y, testing$pred_xgboost))
   )
-  
+
   g1 <- ggplot(aes(y=value, x=ds, color=variable), data=testqstat) +
     
     xlim(min(testing$ds), max(testing$ds))+
