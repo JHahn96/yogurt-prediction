@@ -12,17 +12,15 @@ params:
 # Setting working directory to the directory of the file
 knitr::opts_knit$set(root.dir = getwd())
 source("collecting_data.R")
-
+set.seed(123)
 
 
 # define the keywords for google trend analysis
 keyword.vec<-c("Joghurt", "gesund essen")
 
-# union of all yogurts
-#df<-load.data.frame(keyword.vec)
-
+data.folder <-("data_hs21") 
 # list of all yogurts with own data frame for each yogurt
-dfs<-load.data.frames(keyword.vec)
+dfs<-load.data.frames(keyword.vec, data.folder)
 
 ```
 
@@ -113,7 +111,7 @@ library(prophet)
 library(tidyverse)
 library(xgboost)
 
-set.seed(123)
+
 ## Define data frame for each modell
 
 d_lm = data.frame(prod = rep(0,19), model = rep(0,19), rmse_t=rep(0,19), rmse_test=rep(0,19), mape_t=rep(0,19), mape_test=rep(0,19))
@@ -247,14 +245,15 @@ for(i in seq(1,length(dfs))){
                as.numeric(promo_02)+
                as.numeric(promo_03)+
                as.numeric(promo_04)+
-               as.numeric(promo_05)+
-               pred.joghurt
-               +pred.gesund
-               +pred.joghurt.price
-               +pred.milk.price,
+               as.numeric(promo_05)
+               #+pred.joghurt
+               #+pred.gesund
+               #+pred.joghurt.price
+               #+pred.milk.price
+               ,
                data=training,
                family="quasipoisson")
-
+  summary(fit_glm)
   training$pred_glm <-  exp(predict(fit_glm))
   testing$pred_glm <-  exp(predict(fit_glm, newdata = testing))
 
@@ -634,8 +633,8 @@ for(i in seq(1,length(prediction))){
     facet_wrap(~variable, ncol=2, labeller = as_labeller(model_names))+
     theme(axis.text = element_text(size=5), axis.title = element_text(size=6)) +
     labs(title=paste(c("Modelcomparison of ", yogurt, ", with MAPE Statistics."), collapse="",sep=""),  
-         x="Time", y="Yogurt Sales")+ 
-    theme(legend.position = "none")
+         x="Time", y="Yogurt Sales")#+ 
+    #theme(legend.position = "none")
   print(g1)
 }
 ```

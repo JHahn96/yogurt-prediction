@@ -16,10 +16,10 @@ setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 # Loading
 
 
-load.data.frame<-function(keyword.vec){
+load.data.frame<-function(keyword.vec, data.folder){
   
   # read csvs
-  filenames <- list.files("data_hs21", pattern="*.csv", full.names=TRUE)
+  filenames <- list.files(data.folder, pattern="*.csv", full.names=TRUE)
   ldf <- lapply(filenames, read.csv)
   
   # union all dfs
@@ -51,8 +51,8 @@ load.data.frame<-function(keyword.vec){
 }
 
 
-load.data.frames<-function(keyword.vec){
-  filenames <- list.files("data_hs21", pattern="*.csv", full.names=TRUE)
+load.data.frames<-function(keyword.vec, data.folder){
+  filenames <- list.files(data.folder, pattern="*.csv", full.names=TRUE)
   ldf <- lapply(filenames, read.csv)
   ldf <- lapply(ldf, convert.to.correct.data.types)
   
