@@ -16,16 +16,31 @@ setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 # Loading
 
 
-load.data.frame<-function(keyword.vec, data.folder){
+load.data.frame<-function(keyword.vec, data.folder, pred.data){
   
   # read csvs
   filenames <- list.files(data.folder, pattern="*.csv", full.names=TRUE)
   ldf <- lapply(filenames, read.csv)
   
+  
+  if (pred.data){
+    data.folder <-("data_hs21_pred") 
+    dfs.pred<-load.prediction.data.frames(data.folder)
+    for(i in seq(1,length(ldf))){
+      df<-convert.to.correct.data.types(ldf[[i]])
+      for(k in seq(1,length(dfs.pred))){
+        df.pred<-dfs.pred[[k]]
+        if (df$article_name[1]==df.pred$article_name[1]){
+          ldf[[i]]<-dplyr::bind_rows(df, df.pred)
+        }
+      }
+    }
+  }
+  
   # union all dfs
   df.cat <- do.call(rbind, ldf)
   
-  df.cat <- convert.to.correct.data.types(df.cat)
+  # df.cat <- convert.to.correct.data.types(df.cat)
   
   # get all trends from keyword vector
   for (keyword in keyword.vec) {
@@ -49,15 +64,37 @@ load.data.frame<-function(keyword.vec, data.folder){
   
   return (df.cat)
 }
+#read.csv(filenames[16])
 
+load.prediction.data.frames<-function(data.folder){
+  filenames <- list.files(data.folder, pattern="*.csv", full.names=TRUE)
+  ldf <- lapply(filenames, read.csv)
+  ldf <- lapply(ldf, convert.to.correct.data.types)
+  return (ldf)
+  }
 
-load.data.frames<-function(keyword.vec, data.folder){
+load.data.frames<-function(keyword.vec, data.folder, pred.data){
   filenames <- list.files(data.folder, pattern="*.csv", full.names=TRUE)
   ldf <- lapply(filenames, read.csv)
   ldf <- lapply(ldf, convert.to.correct.data.types)
   
   # get google trend for all keywords
-  df<- load.data.frame(keyword.vec)
+  df<- load.data.frame(keyword.vec, data.folder, pred.data)
+  
+  if (pred.data){
+    data.folder <-("data_hs21_pred") 
+    dfs.pred<-load.prediction.data.frames(data.folder)
+    for(i in seq(1,length(ldf))){
+      df<-ldf[[i]]
+      for(k in seq(1,length(dfs.pred))){
+        df.pred<-dfs.pred[[k]]
+        if (df$article_name[1]==df.pred$article_name[1]){
+          ldf[[i]]<-dplyr::bind_rows(df, df.pred)
+        }
+      }
+    }
+  }
+  
   
   for (i in 1:length(ldf)){
     
@@ -110,7 +147,7 @@ convert.to.correct.data.types<-function(df){
 }
 
 #keyword<-"Joghurt"
-#df<-df.cat
+df<-df.cat
 #current_year <- 2021
 get.google.trend<-function(keyword, df){
     start <- paste(substr(min(df$yrwk_start),1,8), "01",sep="")

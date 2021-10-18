@@ -1,0 +1,747 @@
+---
+title: "Predicting MIGROS Yogurt Sales"
+author: "Natalie Borter, Beatrice Stierli, Sinah Schüpfer, Adrian Peng, Loris Lindemann, Raphael Suter, Jonathan Hahn"
+date: "20.10.2021"
+output: html_document;
+        pdf_document
+params:
+  wd: !r getwd()
+---
+
+```{r setup, include=TRUE, cache=TRUE, results = 'hide', warning=FALSE, message=FALSE}
+# Setting working directory to the directory of the file
+knitr::opts_knit$set(root.dir = getwd())
+source("collecting_data.R")
+
+set.seed(123)
+
+# define the keywords for google trend analysis
+keyword.vec<-c("Joghurt", "gesund essen")
+
+data.folder <-("data_hs21") 
+# list of all yogurts with own data frame for each yogurt
+dfs<-load.data.frames(keyword.vec, data.folder)
+data.folder <-("data_hs21_pred") 
+dfs.pred<-load.prediction.data.frames(data.folder)
+for(i in seq(1,length(dfs))){
+  df<-dfs[[i]]
+  for(k in seq(1,length(dfs))){
+    df.pred<-dfs.pred[[i]]
+    if (df$article_name[1]==df.pred$article_name[1]){
+      dfs[[i]]<-dplyr::bind_rows(df, df.pred)
+    }
+  }
+}
+
+```
+
+## Describe the dependent variable: waiting times and some of the key predictors
+
+```{r rmse_mape, warning=FALSE, message=FALSE}
+
+## define two functions to assess model fit
+
+## rmse = root mean squared error
+rmse<-function(actual, predicted){
+  round((sum((actual-predicted)^2)/length(actual))^.5,2)
+}
+## mean absolute percentage error
+mape<-function(actual, predicted){
+  round(mean(100*abs((actual-predicted)/actual)),2)
+}
+
+```
+
+### Prediction of unknown Regressors
+
+* milk prices
+* yogurt prices
+* google trends
+
+
+```{r predict_regressors, warning=FALSE, message=FALSE}
+library(forecast)
+
+gesund<-dfs[[1]]$gesund.essen
+Joghurt<-dfs[[1]]$Joghurt
+
+joghurt.price<-dfs[[1]]$kon.yougurtpr.180.fru
+milk.price<-dfs[[1]]$prod.milchpreis.a
+
+ntest <- 12 # measurements months, wollen wir hier wirklich nur 3 Monate?
+
+len <- length(gesund)
+```
+
+
+### Predict the Google trends value of the key word "gesund essen".
+
+Predict the future google trends value for the keyword "gesund essen" in Switzerland.
+
+```{r predict_gtrends_gesund}
+trainingg<-gesund[c(1:(len-ntest))]
+testingg<-gesund[c((len-ntest+1):len)]
+arima.ges<-auto.arima(trainingg, ic = "aic")
+ges.pred <- predict(arima.ges, n.ahead = 12)
+checkresiduals(arima.ges)
+```
+
+
+### Predict the Google trends value of the key word "Joghurt".
+
+Predict the future google trends value for the keyword "Joghurt" in Switzerland.
+
+```{r predict_gtrends_yogurt}
+trainingJ<-Joghurt[c(1:(len-ntest))]
+testingJ<-Joghurt[c((len-ntest+1):len)]
+arima.Jog<-auto.arima(trainingJ, ic = "aic")
+Jog.pred <- predict(arima.Jog, n.ahead = 12)
+checkresiduals(arima.Jog)
+```
+
+
+### Predict the yogurt price
+
+Predict the future [yogurt price](https://www.blw.admin.ch/blw/de/home/markt/marktbeobachtung/milch.html#:~:text=Steigender%20Preis%20f%C3%BCr%20Molkereimilch,im%20Vergleich%20zum%20entsprechenden%20Vorjahreszeitraum) in Switzerland.
+
+```{r predict_yogurt_price}
+trainingJP<-joghurt.price[c(1:(len-ntest))]
+testingJP<-joghurt.price[c((len-ntest+1):len)]
+arima.JP<-auto.arima(trainingJP, ic = "aic")
+JP.pred <- predict(arima.ges, n.ahead = 12)
+checkresiduals(arima.JP)
+```
+
+
+### Predict the milk price
+
+Predict the future [milk price](https://www.blw.admin.ch/blw/de/home/markt/marktbeobachtung/milch.html#:~:text=Steigender%20Preis%20f%C3%BCr%20Molkereimilch,im%20Vergleich%20zum%20entsprechenden%20Vorjahreszeitraum) in Switzerland.
+
+```{r predict_milk_price}
+trainingMP<-milk.price[c(1:(len-ntest))]
+testingMP<-milk.price[c((len-ntest+1):len)]
+arima.MP<-auto.arima(trainingMP, ic = "aic")
+MP.pred <- predict(arima.Jog, n.ahead = 12)
+checkresiduals(arima.MP)
+```
+
+Create a series of known values and predicted ones.
+
+```{r create_series_of_prediction}
+ts.pred.gesund <- c(trainingg, as.numeric(ges.pred$pred))
+ts.pred.joghurt <- c(trainingJ, as.numeric(Jog.pred$pred))
+ts.pred.joghurt.price <- c(trainingJP, as.numeric(JP.pred$pred))
+ts.pred.milk.price <- c(trainingMP, as.numeric(MP.pred$pred))
+```
+
+
+## Apply each model to each yogurt
+
+A loop that applies each model to each yogurt.
+The relevant data is stored for comparison.
+```{r prepare_loop, warning=FALSE, message=FALSE, cache=TRUE}
+library(party)
+library(prophet)
+library(tidyverse)
+library(xgboost)
+
+## Define data frame for each model
+
+d_lm = data.frame(prod = rep(0,19), 
+                  model = rep(0,19), 
+                  rmse_t=rep(0,19), 
+                  rmse_test=rep(0,19), 
+                  mape_t=rep(0,19),
+                  mape_test=rep(0,19))
+
+d = data.frame(prod = rep(0,19), 
+                  model = rep(0,19), 
+                  rmse_t=rep(0,19), 
+                  rmse_test=rep(0,19), 
+                  mape_t=rep(0,19),
+                  mape_test=rep(0,19))
+
+d_glm = data.frame(prod = rep(0,19), 
+                  model = rep(0,19), 
+                  rmse_t=rep(0,19), 
+                  rmse_test=rep(0,19), 
+                  mape_t=rep(0,19),
+                  mape_test=rep(0,19))
+
+d_prop1 = data.frame(prod = rep(0,19), 
+                  model = rep(0,19), 
+                  rmse_t=rep(0,19), 
+                  rmse_test=rep(0,19), 
+                  mape_t=rep(0,19),
+                  mape_test=rep(0,19))
+
+d_prop2 = data.frame(prod = rep(0,19), 
+                  model = rep(0,19), 
+                  rmse_t=rep(0,19), 
+                  rmse_test=rep(0,19), 
+                  mape_t=rep(0,19),
+                  mape_test=rep(0,19))
+
+d_xgboost = data.frame(prod = rep(0,19), 
+                  model = rep(0,19), 
+                  rmse_t=rep(0,19), 
+                  rmse_test=rep(0,19), 
+                  mape_t=rep(0,19),
+                  mape_test=rep(0,19))
+
+d_factorM = data.frame(prod = rep(0,19), 
+                  model = rep(0,19), 
+                  rmse_t=rep(0,19), 
+                  rmse_test=rep(0,19), 
+                  mape_t=rep(0,19),
+                  mape_test=rep(0,19))
+
+d_factorR = data.frame(prod = rep(0,19), 
+                  model = rep(0,19), 
+                  rmse_t=rep(0,19), 
+                  rmse_test=rep(0,19), 
+                  mape_t=rep(0,19),
+                  mape_test=rep(0,19))
+
+prediction <- list()
+```
+
+```{r loop_over_models, warning=FALSE, message=FALSE, cache=TRUE,}
+## Loop over each yogurt and apply data on each model
+
+for(i in seq(1,length(dfs))){
+  
+  ## replace Null values
+  dfs[[i]][is.na(dfs[[i]])] <- 0
+  
+  ## add prediction of Gtrends
+  dfs[[i]]["pred.joghurt"]<-ts.pred.joghurt
+  dfs[[i]]["pred.gesund"]<-ts.pred.gesund
+  
+  ## add prediction of milk and yogurt prices
+  dfs[[i]]["pred.joghurt.price"]<-ts.pred.joghurt.price
+  dfs[[i]]["pred.milk.price"]<-ts.pred.milk.price
+  
+  df_final<-dfs[[i]]
+
+  ## create lockdown
+  ld_start = as.Date("08.04.2020", format="%d.%m.%Y")
+  ld_end = as.Date("26.04.2020", format="%d.%m.%Y")
+  ld<-data.frame("Date" = seq(ld_start,ld_end, by = 'days'), row.names = )
+  ld[,"Bezeichnung"]<-"Lockdown"
+
+  #events<-rbind(ld, hG_factoreneva)
+  events <- ld
+
+  h<-data_frame(
+    holiday = events[,"Bezeichnung"],
+    ds = as.Date(events[,"Date"]),
+    lower_window = 0,
+    upper_window = 1
+  )
+
+  ## refactor columns for prophet package
+  A<-df_final[,c("yrwk_start", "sales")]
+  names(A)<-c("ds","y")
+
+  AL<-df_final[,c("yrwk_start", 
+                  "sales",
+                  "year", 
+                  "month", 
+                  "week", 
+                  "promo_01", 
+                  "promo_02", 
+                  "promo_03", 
+                  "promo_04", 
+                  "promo_05",
+                  "pred.joghurt",
+                  "pred.gesund",
+                  "pred.joghurt.price",
+                  "pred.milk.price")]
+  
+  names(AL)<-c("ds",
+               "y",
+               "year",
+               "month",
+               "week",
+               "promo_01",
+               "promo_02",
+               "promo_03",
+               "promo_04",
+               "promo_05",
+               "pred.joghurt",
+               "pred.gesund",
+               "pred.joghurt.price",
+               "pred.milk.price")
+
+  ## the test set is the last 4 weeks measured, 
+  ## the training set is everything else
+  
+  len <- nrow(AL)
+  training<-AL[1:(len-ntest),]
+  testing<-AL[(len-ntest+1):len,]
+  
+  ## ------------------------------------------------------------------------
+  
+  ## Linear Model
+  
+  mod<-lm(y~ds+
+            week+
+            month+
+            year+
+            as.numeric(promo_01)+
+            as.numeric(promo_02)
+          +as.numeric(promo_03)
+          +as.numeric(promo_04)
+          +as.numeric(promo_05)
+          +pred.joghurt
+          +pred.gesund
+          +pred.joghurt.price
+          +pred.milk.price
+          +pred.milk.price, data=training)
+  
+  testingA<-mod$coefficients[1]+mod$coefficients[2]*as.numeric(testing$week)+mod$coefficients[3]*as.numeric(testing$month)+mod$coefficients[4]*as.numeric(testing$promo_01)
+  
+  testing$pred_lm <- predict(mod, newdata = testing)
+  training$pred_lm <-mod$fitted.values
+  
+  prod <- df_final$article_name[1]
+  model <- "lin1"
+  a <- c(rmse(training$y, training$pred_lm),rmse(testing$y, testing$pred_lm))
+  b <- c(mape(training$y, training$pred_lm),mape(testing$y, testing$pred_lm))
+  c <- c(prod,model,a,b)
+  d_lm[i, ] = c
+  
+  ## ------------------------------------------------------------------------
+  
+  ## GLM
+  
+  fit_glm<-glm(y~ds+ 
+               week +
+               month+
+               year+
+               as.numeric(promo_01)+
+               as.numeric(promo_02)+
+               as.numeric(promo_03)+
+               as.numeric(promo_04)+
+               as.numeric(promo_05)
+               #+pred.joghurt
+               #+pred.gesund
+               #+pred.joghurt.price
+               #+pred.milk.price
+               ,
+               data=training,
+               family="quasipoisson")
+  summary(fit_glm)
+  training$pred_glm <-  exp(predict(fit_glm))
+  testing$pred_glm <-  exp(predict(fit_glm, newdata = testing))
+
+  model <- "model_GLM"
+  a_glm <- c(rmse(training$y, training$pred_glm),rmse(testing$y, testing$pred_glm))
+  b_glm <- c(mape(training$y, training$pred_glm),mape(testing$y, testing$pred_glm))
+  c_glm <- c(prod,model,a_glm,b_glm)
+  d_glm[i, ] = c_glm
+  
+  ## ------------------------------------------------------------------------
+  
+  ## Regression Tree
+  
+  ## tree with party
+  
+  tree <- ctree(y~#ds+ #ds taken out -> date is not supported
+                  week + 
+                  month +
+                  year +
+                  promo_01+
+                  promo_02+
+                  promo_03+
+                  promo_04+
+                  promo_05
+                  +pred.joghurt
+                  +pred.gesund
+                  +pred.joghurt.price
+                  +pred.milk.price,
+                  data=training)
+  
+  ## show tree
+  #plot(tree)
+  
+  training$pred_tree <-predict(tree)
+  testing$pred_tree <-predict(tree, newdata = testing)
+  
+  model <- "model_basic_tree"
+  a <- c(rmse(training$y, training$pred_tree),rmse(testing$y, testing$pred_tree))
+  b <- c(mape(training$y, training$pred_tree),mape(testing$y, testing$pred_tree))
+  c <- c(prod,model,a,b)
+  d[i, ] = c
+  
+  ## ------------------------------------------------------------------------
+  
+  ## Basic Prophet Model
+  
+  ## specify holidays on weekly basis; 
+  ## if holiday in a week the whole week is marked as holiday 
+  ## (because data is provided on a weekly basis)
+  
+  years <- c(2016, 2017, 2018, 2019, 2020, 2021)
+  country.name <- 'CH'
+  df <- prophet:::make_holidays_df(years, country.name)
+
+  ## make sure that each holiday hots over one week
+  df$lower_window<--4
+  df$upper_window<-4
+
+  ##combine holidays with the data frame
+  df2<-select(df,"holiday","ds","lower_window","upper_window")
+
+  s<-rbind(h,df2)
+
+  m <- prophet(holidays=s, mcmc_samples=300, 
+              holidays_prior_scale=0.5, 
+               changepoint_prior_scale=0.01, 
+              yearly.seasonality=TRUE)
+  #m <- add_country_holidays(m, country_name = 'CH')
+  #m <- add_country_holidays(m, df)
+  m <- fit.prophet(m, training)
+  future <- make_future_dataframe(m, periods = ntest, freq = "week", include_history = TRUE)
+  fcst <- predict(m, future)
+  n<-nrow(training)
+  training$pred_prophet1<-fcst$yhat[1:n]
+  testing$pred_prophet1<-fcst$yhat[(n+1):(n+ntest)]
+  
+  model <- "Prophet1"
+  a <- c(rmse(training$y, training$pred_prophet1),rmse(testing$y, testing$pred_prophet1))
+  b <- c(mape(training$y, training$pred_prophet1),mape(testing$y, testing$pred_prophet1))
+  c <- c(prod,model,a,b)
+  d_prop1[i, ] = c
+  
+  ## ------------------------------------------------------------------------
+  
+  ## Complex Prophet Model (with regressors)
+  
+  m_h_r <- prophet(holidays=s, mcmc_samples=300, 
+             holidays_prior_scale=0.5, 
+             changepoint_prior_scale=0.01, 
+             #seasonality_mode='multiplicative', 
+             yearly.seasonality=TRUE, 
+             #weekly.seasonality=TRUE, 
+             #daily.seasonality=FALSE
+             )
+  ## add regressors to the model
+  m_h_r <- add_regressor(m_h_r, 'promo_01')
+  m_h_r <- add_regressor(m_h_r, "promo_02")
+  m_h_r <- add_regressor(m_h_r, 'promo_03')
+  m_h_r <- add_regressor(m_h_r, "promo_04")
+  m_h_r <- add_regressor(m_h_r, 'promo_05')
+  m_h_r <- add_regressor(m_h_r, "pred.joghurt")
+  m_h_r <- add_regressor(m_h_r, "pred.gesund")
+  m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
+  m_h_r <- add_regressor(m_h_r, "pred.milk.price")
+  
+  m_h_r <- fit.prophet(m_h_r, training)
+  
+  ## create the data frame for the prediction
+  future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
+
+  ## ad actual values to the prediction
+  future$promo_01<- AL[,c("promo_01")]
+  future$promo_02<- AL[,c("promo_02")]
+  future$promo_03<- AL[,c("promo_03")]
+  future$promo_04<- AL[,c("promo_04")]
+  future$promo_05<- AL[,c("promo_05")]
+  future$pred.joghurt<- AL[,c("pred.joghurt")]
+  future$pred.gesund<- AL[,c("pred.gesund")]
+  future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
+  future$pred.milk.price<- AL[,c("pred.milk.price")]
+  
+  ## predict
+  fcst_h_r <- predict(m_h_r, future)
+
+  n<-nrow(training)
+
+  training$pred_prophet2<-fcst_h_r$yhat[1:n]
+  testing$pred_prophet2<-fcst_h_r$yhat[(n+1):(n+ntest)]
+  
+  model <- "Prophet2"
+  a <- c(rmse(training$y, training$pred_prophet2),rmse(testing$y, testing$pred_prophet2))
+  b <- c(mape(training$y, training$pred_prophet2),mape(testing$y, testing$pred_prophet2))
+  c <- c(prod,model,a,b)
+  d_prop2[i, ] = c
+  
+  ## ------------------------------------------------------------------------
+  
+  ## XGBOOST
+ 
+  ## We need to provide the x and y variables 
+  ## separately and in the following format:
+  
+  #training
+  X <- AL%>%
+    select(-y, 
+           -ds
+           )%>% 
+    mutate(across(where(is.factor), as.numeric))%>%
+    as.matrix(.)
+  
+  X_train <- X[1:(len-ntest),]
+  
+  y <- AL[1:(len-ntest),]%>%
+    select(y) %>%
+    as.matrix(.)
+  
+  ## Train model
+  fit.gbt <- xgboost(data = X_train, 
+                     label = y,
+                     nrounds=60, 
+                     objective = "count:poisson",
+                     verbose = 0)
+  
+  ## Make predictions on training data
+  pred_gbt_train <- predict(fit.gbt, X[1:(len-ntest),])
+  ## Make predictions on test data
+  pred_gbt_test <- predict(fit.gbt, X[(len-ntest+1):len,])
+  
+  ## Which variables are important?
+  #require(ggplot2)
+  #library(Ckmeans.1d.dp)
+  #importance=xgb.importance(colnames(X), model = fit.gbt)
+  #xgb.ggplot.importance(importance)
+  
+  training$pred_xgboost<-pred_gbt_train
+  testing$pred_xgboost<-pred_gbt_test
+  
+  c(rmse(training$y, training$pred_xgboost),rmse(testing$y, testing$pred_xgboost))
+  c(mape(training$y, training$pred_xgboost),mape(testing$y, testing$pred_xgboost))
+  
+  model <- "XGBOOST"
+  a <- c(rmse(training$y, training$pred_xgboost),rmse(testing$y, testing$pred_xgboost))
+  b <- c(mape(training$y, training$pred_xgboost),mape(testing$y, testing$pred_xgboost))
+  c <- c(prod,model,a,b)
+  d_xgboost[i, ] = c
+  
+  ## ------------------------------------------------------------------------
+  
+  ## Prophet with factor scores
+  
+  ## WHATCH OUT! y is replaced with factor scores to apply the prophet model
+  
+  AL$y.MCLASSI<-df_final$MClassi
+  training$y<-AL$y.MCLASSI[1:(len-ntest)]
+  testing$y<-AL$y.MCLASSI[(len-ntest+1):len]
+
+  m_h_r <- prophet(holidays=s, mcmc_samples=300, 
+                   holidays_prior_scale=0.5, 
+                   changepoint_prior_scale=0.01, 
+                   #seasonality_mode='multiplicative', 
+                   yearly.seasonality=TRUE, 
+                   #weekly.seasonality=TRUE, 
+                   #daily.seasonality=FALSE
+  )
+  
+  m_h_r <- add_regressor(m_h_r, 'promo_01')
+  m_h_r <- add_regressor(m_h_r, "promo_02")
+  m_h_r <- add_regressor(m_h_r, 'promo_03')
+  m_h_r <- add_regressor(m_h_r, "promo_04")
+  m_h_r <- add_regressor(m_h_r, 'promo_05')
+  #m_h_r <- add_regressor(m_h_r, "pred.joghurt")
+  #m_h_r <- add_regressor(m_h_r, "pred.gesund")
+  #m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
+  #m_h_r <- add_regressor(m_h_r, "pred.milk.price")
+  m_h_r <- fit.prophet(m_h_r, training)
+  
+  future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
+ 
+  future$promo_01<- AL[,c("promo_01")]
+  future$promo_02<- AL[,c("promo_02")]
+  future$promo_03<- AL[,c("promo_03")]
+  future$promo_04<- AL[,c("promo_04")]
+  future$promo_05<- AL[,c("promo_05")]
+  #future$pred.joghurt<- AL[,c("pred.joghurt")]
+  #future$pred.gesund<- AL[,c("pred.gesund")]
+  #future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
+  #future$pred.milk.price<- AL[,c("pred.milk.price")]
+  
+  fcst_h_r <- predict(m_h_r, future)
+  
+  n<-nrow(training)
+  
+  training$pred_ProphetScoresM<-fcst_h_r$yhat[1:n]
+  testing$pred_ProphetScoresM<-fcst_h_r$yhat[(n+1):(n+ntest)]
+  
+  sales<-df_final$sales
+  scores<-c(training$y,testing$pred_ProphetScoresM)
+  
+  mod<-lm(sales~scores)
+  #diff<-mod$fitted.values-sales
+  training$pred_ProphetScoresM<-mod$fitted.values[1:(len-ntest)]
+  testing$pred_ProphetScoresM<-mod$fitted.values[(len-ntest+1):len]
+  
+  c(rmse(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]))
+  c(rmse(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
+  
+  model <- "ProphetScoresM"
+  a <- c(rmse(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]),
+         rmse(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
+  b <- c(mape(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]),
+         mape(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
+  c <- c(prod,model,a,b)
+  d_factorM[i, ] = c
+  
+  ## ------------------------------------------------------------------------
+  
+  ## Prophet with factor scores Rest
+  AL$y.Rest<-df_final$Rest
+  training$y<-AL$y.Rest[1:(len-ntest)]
+  testing$y<-AL$y.Rest[(len-ntest+1):len]
+  
+  m_h_r <- prophet(holidays=s, mcmc_samples=300, 
+                   holidays_prior_scale=0.5, 
+                   changepoint_prior_scale=0.01, 
+                   #seasonality_mode='multiplicative', 
+                   yearly.seasonality=TRUE, 
+                   #weekly.seasonality=TRUE, 
+                   #daily.seasonality=FALSE
+  )
+  
+  m_h_r <- add_regressor(m_h_r, 'promo_01')
+  m_h_r <- add_regressor(m_h_r, "promo_02")
+  m_h_r <- add_regressor(m_h_r, 'promo_03')
+  m_h_r <- add_regressor(m_h_r, "promo_04")
+  m_h_r <- add_regressor(m_h_r, 'promo_05')
+  #m_h_r <- add_regressor(m_h_r, "pred.joghurt")
+  #m_h_r <- add_regressor(m_h_r, "pred.gesund")
+  #m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
+  #m_h_r <- add_regressor(m_h_r, "pred.milk.price")
+  m_h_r <- fit.prophet(m_h_r, training)
+  
+  future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
+  
+  future$promo_01<- AL[,c("promo_01")]
+  future$promo_02<- AL[,c("promo_02")]
+  future$promo_03<- AL[,c("promo_03")]
+  future$promo_04<- AL[,c("promo_04")]
+  future$promo_05<- AL[,c("promo_05")]
+  #future$pred.joghurt<- AL[,c("pred.joghurt")]
+  #future$pred.gesund<- AL[,c("pred.gesund")]
+  #future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
+  #future$pred.milk.price<- AL[,c("pred.milk.price")]
+  
+  fcst_h_r <- predict(m_h_r, future)
+  
+  n<-nrow(training)
+  
+  training$pred_ProphetScoresRest<-fcst_h_r$yhat[1:n]
+  testing$pred_ProphetScoresRest<-fcst_h_r$yhat[(n+1):(n+ntest)]
+  
+  sales<-df_final$sales
+  scores<-c(training$y,testing$pred_ProphetScoresRest)
+  
+  mod<-lm(sales~scores)
+  diff<-mod$fitted.values-sales
+  
+  training$pred_ProphetScoresRest<-mod$fitted.values[1:(len-ntest)]
+  testing$pred_ProphetScoresRest<-mod$fitted.values[(len-ntest+1):len]
+  
+  model <- "prophetScoresR"
+  a <- c(rmse(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]),
+         rmse(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
+  b <- c(mape(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]),
+         mape(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
+  c <- c(prod,model,a,b)
+  d_factorR[i, ] = c
+  
+  ## overwrite y from prophet to true sales again 
+  
+  training$y<-df_final$sales[1:(len-ntest)]
+  testing$y<-df_final$sales[(len-ntest+1):len]
+  
+  ## store predicted data for plotting
+  prediction[[i]]<-testing
+  #print(c("All modells predicted for ", prod))
+}
+```
+
+## Best models for each Yogurt
+
+```{r evaluate}
+library(hablar)
+library(dplyr)
+## create mape data frame of all models
+## set correct data type (char to number)
+y.m.df<-rbind(d_lm, d, d_glm, d_prop1, d_prop2, d_xgboost, d_factorM, d_factorR)%>% 
+  retype()
+
+## get best performing model for each yogurt
+y.m.df %>%
+  group_by(prod) %>%
+  filter(mape_test == min(mape_test))
+```
+
+
+
+```{r}
+
+```
+
+
+## Plot predictions
+
+```{r plot_sales, warning=FALSE}
+library(ggplot2)
+
+for(i in seq(1,length(prediction))){
+  #i <-3
+  
+  yogurt <- dfs[[i]]$article_name[1]
+  
+  testing<-prediction[[i]]
+  
+  testqstat<- data.table::melt(prediction[[i]], id="ds", measure=c("pred_prophet1", 
+                                                           "pred_prophet2", 
+                                                           "pred_ProphetScoresM", 
+                                                           "pred_xgboost"))
+  model_names<- c(
+    'pred_prophet1' = sprintf("basic Prophet\n MAPE: %.2f (Train) - %.2f (Test)",
+                     mape(training$y, training$pred_prophet1),
+                     mape(testing$y, testing$pred_prophet1)),
+    
+    'pred_prophet2' = sprintf("complex Prophet\n MAPE: %.2f (Train) - %.2f (Test)",
+                     mape(training$y, training$pred_prophet2),
+                     mape(testing$y, testing$pred_prophet2)),
+    
+    'pred_ProphetScoresM' = sprintf("M_scores Prophet \n  MAPE: %.2f (Train) - %.2f (Test)",
+                     mape(training$y, training$pred_ProphetScoresM),
+                     mape(testing$y, testing$pred_ProphetScoresM)),  
+    
+    'pred_xgboost' = sprintf("XGBoosting \n MAPE: %.2f (Train) - %.2f (Test)",
+                     mape(training$y, training$pred_xgboost),
+                     mape(testing$y, testing$pred_xgboost))
+  )
+
+  g1 <- ggplot(aes(y=value, x=ds, color=variable), data=testqstat) +
+    
+    xlim(min(testing$ds), max(testing$ds))+
+    geom_line(data = testing, aes(y=y), color="grey70") +
+    geom_line() +
+    facet_wrap(~variable, ncol=2, labeller = as_labeller(model_names))+
+    theme(axis.text = element_text(size=5), axis.title = element_text(size=6)) +
+    labs(title=paste(c("Modelcomparison of ", yogurt, ", with MAPE Statistics."), collapse="",sep=""),  
+         x="Time", y="Yogurt Sales")#+ 
+    #theme(legend.position = "none")
+  print(g1)
+}
+```
+
+## Overview of best performing model
+
+```{r model_overview}
+## create data framewith all MAPE in testset
+mape_test<-cbind(as.numeric(d_lm$mape_test),as.numeric(d_glm$mape_test),as.numeric(d$mape_test),as.numeric(d_prop1$mape_test),as.numeric(d_prop2$mape_test),as.numeric(d_xgboost$mape_test),as.numeric(d_factorM$mape_test),as.numeric(d_factorR$mape_test)) 
+
+colnames(mape_test)<-c("lm","glm","tree","prop1","prop2","xgboost","factorM","factorR")
+rownames(mape_test)<-d_glm[,1]
+
+min<-apply(mape_test, 1, FUN = min)
+a<-mape_test==min
+colSums(a)
+```
