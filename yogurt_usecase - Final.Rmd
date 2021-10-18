@@ -604,23 +604,22 @@ for(i in seq(1,length(prediction))){
   
   testing<-prediction[[i]]
   
-  testqstat<- data.table::melt(prediction[[i]], id="ds", measure=c("pred_ProphetScoresM", 
+  testqstat<- data.table::melt(prediction[[i]], id="ds", measure=c("pred_prophet1", 
                                                            "pred_prophet2", 
-                                                           "pred_glm", 
+                                                           "pred_ProphetScoresM", 
                                                            "pred_xgboost"))
   model_names<- c(
-    'pred_ProphetScoresM' = sprintf("ProphetScoresM \n MAPE: %.2f (Train) - %.2f (Test)",
-                     mape(training$y, training$pred_ProphetScoresM),
-                     mape(testing$y, testing$pred_pred_ProphetScoresM)),
+    'pred_prophet1' = sprintf("basic Prophet\n MAPE: %.2f (Train) - %.2f (Test)",
+                     mape(training$y, training$pred_prophet1),
+                     mape(testing$y, testing$pred_prophet1)),
     
-    'pred_prophet2' = sprintf(
-      "Prophet 2 \n MAPE: %.2f (Train) - %.2f (Test)",
+    'pred_prophet2' = sprintf("complex Prophet\n MAPE: %.2f (Train) - %.2f (Test)",
                      mape(training$y, training$pred_prophet2),
                      mape(testing$y, testing$pred_prophet2)),
     
-    'pred_glm' = sprintf("GLM \n  MAPE: %.2f (Train) - %.2f (Test)",
-                     mape(training$y, training$pred_glm),
-                     mape(testing$y, testing$pred_glm)),  
+    'pred_ProphetScoresM' = sprintf("M_scores Prophet \n  MAPE: %.2f (Train) - %.2f (Test)",
+                     mape(training$y, training$pred_ProphetScoresM),
+                     mape(testing$y, testing$pred_ProphetScoresM)),  
     
     'pred_xgboost' = sprintf("XGBoosting \n MAPE: %.2f (Train) - %.2f (Test)",
                      mape(training$y, training$pred_xgboost),
