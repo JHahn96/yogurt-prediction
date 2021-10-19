@@ -19,8 +19,9 @@ set.seed(123)
 keyword.vec<-c("Joghurt", "gesund essen")
 
 data.folder <-("data_hs21") 
+pred.data <-FALSE
 # list of all yogurts with own data frame for each yogurt
-dfs<-load.data.frames(keyword.vec, data.folder)
+dfs<-load.data.frames(keyword.vec, data.folder, pred.data)
 
 ```
 
@@ -110,7 +111,7 @@ Predict the future [milk price](https://www.blw.admin.ch/blw/de/home/markt/markt
 trainingMP<-milk.price[c(1:(len-ntest))]
 testingMP<-milk.price[c((len-ntest+1):len)]
 arima.MP<-auto.arima(trainingMP, ic = "aic")
-MP.pred <- predict(arima.Jog, n.ahead = ntest)
+MP.pred <- predict(arima.MP, n.ahead = ntest)
 checkresiduals(arima.MP)
 ```
 
