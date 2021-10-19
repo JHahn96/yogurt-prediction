@@ -19,8 +19,14 @@ set.seed(123)
 keyword.vec<-c("Joghurt", "gesund essen")
 
 data.folder <-("data_hs21") 
+pred.data <-TRUE
 # list of all yogurts with own data frame for each yogurt
-dfs<-load.data.frames(keyword.vec, data.folder)
+dfs<-load.data.frames(keyword.vec, data.folder, pred.data)
+
+
+```
+
+```{r}
 data.folder <-("data_hs21_pred") 
 dfs.pred<-load.prediction.data.frames(data.folder)
 for(i in seq(1,length(dfs))){
@@ -32,8 +38,8 @@ for(i in seq(1,length(dfs))){
     }
   }
 }
-
 ```
+
 
 ## Describe the dependent variable: waiting times and some of the key predictors
 
@@ -68,7 +74,7 @@ Joghurt<-dfs[[1]]$Joghurt
 joghurt.price<-dfs[[1]]$kon.yougurtpr.180.fru
 milk.price<-dfs[[1]]$prod.milchpreis.a
 
-ntest <- 12 # measurements months, wollen wir hier wirklich nur 3 Monate?
+ntest <- length(dfs[[1]]$sales[0 ==dfs[[1]]$sales]) # measurements months
 
 len <- length(gesund)
 ```
@@ -79,10 +85,9 @@ len <- length(gesund)
 Predict the future google trends value for the keyword "gesund essen" in Switzerland.
 
 ```{r predict_gtrends_gesund}
-trainingg<-gesund[c(1:(len-ntest))]
-testingg<-gesund[c((len-ntest+1):len)]
+trainingg<-gesund
 arima.ges<-auto.arima(trainingg, ic = "aic")
-ges.pred <- predict(arima.ges, n.ahead = 12)
+ges.pred <- predict(arima.ges, n.ahead = ntest)
 checkresiduals(arima.ges)
 ```
 
@@ -92,10 +97,9 @@ checkresiduals(arima.ges)
 Predict the future google trends value for the keyword "Joghurt" in Switzerland.
 
 ```{r predict_gtrends_yogurt}
-trainingJ<-Joghurt[c(1:(len-ntest))]
-testingJ<-Joghurt[c((len-ntest+1):len)]
+trainingJ<-Joghurt
 arima.Jog<-auto.arima(trainingJ, ic = "aic")
-Jog.pred <- predict(arima.Jog, n.ahead = 12)
+Jog.pred <- predict(arima.Jog, n.ahead = ntest)
 checkresiduals(arima.Jog)
 ```
 
@@ -105,10 +109,9 @@ checkresiduals(arima.Jog)
 Predict the future [yogurt price](https://www.blw.admin.ch/blw/de/home/markt/marktbeobachtung/milch.html#:~:text=Steigender%20Preis%20f%C3%BCr%20Molkereimilch,im%20Vergleich%20zum%20entsprechenden%20Vorjahreszeitraum) in Switzerland.
 
 ```{r predict_yogurt_price}
-trainingJP<-joghurt.price[c(1:(len-ntest))]
-testingJP<-joghurt.price[c((len-ntest+1):len)]
+trainingJP<-joghurt.price
 arima.JP<-auto.arima(trainingJP, ic = "aic")
-JP.pred <- predict(arima.ges, n.ahead = 12)
+JP.pred <- predict(arima.JP, n.ahead = ntest)
 checkresiduals(arima.JP)
 ```
 
@@ -118,20 +121,19 @@ checkresiduals(arima.JP)
 Predict the future [milk price](https://www.blw.admin.ch/blw/de/home/markt/marktbeobachtung/milch.html#:~:text=Steigender%20Preis%20f%C3%BCr%20Molkereimilch,im%20Vergleich%20zum%20entsprechenden%20Vorjahreszeitraum) in Switzerland.
 
 ```{r predict_milk_price}
-trainingMP<-milk.price[c(1:(len-ntest))]
-testingMP<-milk.price[c((len-ntest+1):len)]
+trainingMP<-milk.price
 arima.MP<-auto.arima(trainingMP, ic = "aic")
-MP.pred <- predict(arima.Jog, n.ahead = 12)
+MP.pred <- predict(arima.MP, n.ahead = ntest)
 checkresiduals(arima.MP)
 ```
 
 Create a series of known values and predicted ones.
 
 ```{r create_series_of_prediction}
-ts.pred.gesund <- c(trainingg, as.numeric(ges.pred$pred))
-ts.pred.joghurt <- c(trainingJ, as.numeric(Jog.pred$pred))
-ts.pred.joghurt.price <- c(trainingJP, as.numeric(JP.pred$pred))
-ts.pred.milk.price <- c(trainingMP, as.numeric(MP.pred$pred))
+ts.pred.gesund <- trainingg
+ts.pred.joghurt <- trainingJ
+ts.pred.joghurt.price <- trainingJP
+ts.pred.milk.price <- trainingMP
 ```
 
 
@@ -210,9 +212,9 @@ prediction <- list()
 ## Loop over each yogurt and apply data on each model
 
 for(i in seq(1,length(dfs))){
-  
+  i <-1
   ## replace Null values
-  dfs[[i]][is.na(dfs[[i]])] <- 0
+  #dfs[[i]][is.na(dfs[[i]])] <- 0
   
   ## add prediction of Gtrends
   dfs[[i]]["pred.joghurt"]<-ts.pred.joghurt
@@ -332,7 +334,6 @@ for(i in seq(1,length(dfs))){
                ,
                data=training,
                family="quasipoisson")
-  summary(fit_glm)
   training$pred_glm <-  exp(predict(fit_glm))
   testing$pred_glm <-  exp(predict(fit_glm, newdata = testing))
 

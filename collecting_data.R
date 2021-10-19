@@ -1,6 +1,6 @@
 # load relevant libraries
 
-
+library(data.table)
 library(gtrendsR)
 library(hablar)
 library(tidyverse)
@@ -24,14 +24,14 @@ load.data.frame<-function(keyword.vec, data.folder, pred.data){
   
   
   if (pred.data){
-    data.folder <-("data_hs21_pred") 
-    dfs.pred<-load.prediction.data.frames(data.folder)
+    data.folder.pred <-paste(data.folder,"_pred", sep="") 
+    dfs.pred<-load.prediction.data.frames(data.folder.pred)
     for(i in seq(1,length(ldf))){
       df<-convert.to.correct.data.types(ldf[[i]])
       for(k in seq(1,length(dfs.pred))){
         df.pred<-dfs.pred[[k]]
         if (df$article_name[1]==df.pred$article_name[1]){
-          ldf[[i]]<-dplyr::bind_rows(df, df.pred)
+          ldf[[i]]<-rbindlist(list(df, df.pred), fill = TRUE)
         }
       }
     }
@@ -40,7 +40,9 @@ load.data.frame<-function(keyword.vec, data.folder, pred.data){
   # union all dfs
   df.cat <- do.call(rbind, ldf)
   
-  # df.cat <- convert.to.correct.data.types(df.cat)
+  if (!pred.data){
+    df.cat <- convert.to.correct.data.types(df.cat)
+  }
   
   # get all trends from keyword vector
   for (keyword in keyword.vec) {
@@ -82,14 +84,14 @@ load.data.frames<-function(keyword.vec, data.folder, pred.data){
   df<- load.data.frame(keyword.vec, data.folder, pred.data)
   
   if (pred.data){
-    data.folder <-("data_hs21_pred") 
-    dfs.pred<-load.prediction.data.frames(data.folder)
+    data.folder.pred <-paste(data.folder,"_pred", sep="")
+    dfs.pred<-load.prediction.data.frames(data.folder.pred)
     for(i in seq(1,length(ldf))){
-      df<-ldf[[i]]
+      df.y<-ldf[[i]]
       for(k in seq(1,length(dfs.pred))){
         df.pred<-dfs.pred[[k]]
-        if (df$article_name[1]==df.pred$article_name[1]){
-          ldf[[i]]<-dplyr::bind_rows(df, df.pred)
+        if (df.y$article_name[1]==df.pred$article_name[1]){
+          ldf[[i]]<-rbindlist(list(df.y, df.pred), fill = TRUE)
         }
       }
     }
@@ -97,8 +99,8 @@ load.data.frames<-function(keyword.vec, data.folder, pred.data){
   
   
   for (i in 1:length(ldf)){
-    
-    # get the gtrends data
+    i<-1
+    ## get the gtrends data
     gtrends<-df %>%
       select(c("yrwk_start", "article_name"),gsub(" ", ".", keyword.vec))
     
@@ -107,13 +109,14 @@ load.data.frames<-function(keyword.vec, data.folder, pred.data){
                      by.y = c("yrwk_start", "article_name"), 
                      by.x = c("yrwk_start", "article_name") ,  
                      all.x = TRUE)
-    # add yogurt prices
+    
+    ## add yogurt prices
     ldf[[i]] <-merge(x = ldf[i], y = read.yogurt.data(), by.y = "date", by.x = "date.month" ,  all.x = TRUE)
     
-    # add milk prices
+    ## add milk prices
     ldf[[i]] <-merge(x = ldf[i], y = read.milk.data(), by.y = "date", by.x = "date.month" ,  all.x = TRUE)
     
-    # add Mclassi factor and Rest factor
+    ## add Mclassi factor and Rest factor
     ldf[[i]]<-calc_mclassi_rest(ldf[i], df)
     ldf[[i]][is.na(ldf[[i]])] <- 0
   }
@@ -147,7 +150,7 @@ convert.to.correct.data.types<-function(df){
 }
 
 #keyword<-"Joghurt"
-df<-df.cat
+#df<-df.cat
 #current_year <- 2021
 get.google.trend<-function(keyword, df){
     start <- paste(substr(min(df$yrwk_start),1,8), "01",sep="")
@@ -170,7 +173,7 @@ get.google.trend<-function(keyword, df){
 
 
 read.yogurt.data<-function(){
-  # xlsx files
+  ## xlsx files
   yogurt <- read_excel("data_hs21/yogurt.xlsx")
   
   yogurt <- yogurt %>%
@@ -182,7 +185,7 @@ read.yogurt.data<-function(){
 }
 
 read.milk.data<-function(){
-  # xls files
+  ## xls files
   milk <- read_excel("data_hs21/milchpreis.xlsx")
   
   milk <- milk %>%
@@ -193,12 +196,15 @@ read.milk.data<-function(){
   return(milk)
 }
 
-
-
+df_yogurt<-ldf[i]
+df_all<-df
+#df_yogurt<-df.cat
+#df_all<-df.cat
 calc_mclassi_rest<-function(df_yogurt, df_all){
   
+  df_all$sales[is.na(df_all$sales)]<--1
   Namen<-names(table(df_all$article_name))
-  #split dataframe based on variabe
+  ## split dataframe based on variabe
   
   a<-df_all$article_name==Namen[1]
   b<-df_all$article_name==Namen[2]
