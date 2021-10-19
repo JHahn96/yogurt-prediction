@@ -47,6 +47,13 @@ load.data.frame<-function(keyword.vec, data.folder, pred.data){
   # get all trends from keyword vector
   for (keyword in keyword.vec) {
     t<-get.google.trend(keyword, df.cat)
+    
+    if(pred.data){
+      t<-t %>% ungroup(.) %>% 
+        mutate_if(is.integer,as.factor)%>% 
+        mutate_if(is.double,as.factor)
+    }
+    
     df.cat<-merge(x = df.cat, 
                   y = t, 
                   by.y = c("week", "month",  "year"), 
