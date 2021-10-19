@@ -681,7 +681,22 @@ y.m.df %>%
 
 
 ```{r}
-
+best_data<-data.frame(date = rep(0,15))
+for(i in seq(1,length(dfs))){
+  y.name<-dfs[[i]]$article_name[1]
+  for(k in seq(1,length(best.models$prod))){
+    prediction_data<-prediction[[i]]
+    if (y.name == best.models$prod[k]){
+      
+      print(paste(y.name, best.models$model[k]))
+      name_pred_y<-paste("pred_", y.name, sep="")
+      name_pred_m<-paste("pred_", best.models$model[k], sep="")
+      best_data[,name_pred_y]<-prediction_data[, name_pred_m]
+      best_data$date <- prediction_data$ds
+    }
+  }
+}
+best_data
 ```
 
 

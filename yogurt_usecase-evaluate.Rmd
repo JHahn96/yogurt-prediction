@@ -299,13 +299,13 @@ for(i in seq(1,length(dfs))){
   
   testingA<-mod$coefficients[1]+mod$coefficients[2]*as.numeric(testing$week)+mod$coefficients[3]*as.numeric(testing$month)+mod$coefficients[4]*as.numeric(testing$promo_01)
   
-  testing$pred_lm <- predict(mod, newdata = testing)
-  training$pred_lm <-mod$fitted.values
+  testing$pred_LM <- predict(mod, newdata = testing)
+  training$pred_LM <-mod$fitted.values
   
   prod <- df_final$article_name[1]
-  model <- "lin1"
-  a <- c(rmse(training$y, training$pred_lm),rmse(testing$y, testing$pred_lm))
-  b <- c(mape(training$y, training$pred_lm),mape(testing$y, testing$pred_lm))
+  model <- "LM"
+  a <- c(rmse(training$y, training$pred_LM),rmse(testing$y, testing$pred_LM))
+  b <- c(mape(training$y, training$pred_LM),mape(testing$y, testing$pred_LM))
   c <- c(prod,model,a,b)
   d_lm[i, ] = c
   
@@ -330,12 +330,12 @@ for(i in seq(1,length(dfs))){
                data=training,
                family="quasipoisson")
   summary(fit_glm)
-  training$pred_glm <-  exp(predict(fit_glm))
-  testing$pred_glm <-  exp(predict(fit_glm, newdata = testing))
+  training$pred_GLM <-  exp(predict(fit_glm))
+  testing$pred_GLM <-  exp(predict(fit_glm, newdata = testing))
 
-  model <- "model_GLM"
-  a_glm <- c(rmse(training$y, training$pred_glm),rmse(testing$y, testing$pred_glm))
-  b_glm <- c(mape(training$y, training$pred_glm),mape(testing$y, testing$pred_glm))
+  model <- "GLM"
+  a_glm <- c(rmse(training$y, training$pred_GLM),rmse(testing$y, testing$pred_GLM))
+  b_glm <- c(mape(training$y, training$pred_GLM),mape(testing$y, testing$pred_GLM))
   c_glm <- c(prod,model,a_glm,b_glm)
   d_glm[i, ] = c_glm
   
@@ -363,12 +363,12 @@ for(i in seq(1,length(dfs))){
   ## show tree
   #plot(tree)
   
-  training$pred_tree <-predict(tree)
-  testing$pred_tree <-predict(tree, newdata = testing)
+  training$pred_RegressionTree <-predict(tree)
+  testing$pred_RegressionTree <- predict(tree, newdata = testing)
   
-  model <- "model_basic_tree"
-  a <- c(rmse(training$y, training$pred_tree),rmse(testing$y, testing$pred_tree))
-  b <- c(mape(training$y, training$pred_tree),mape(testing$y, testing$pred_tree))
+  model <- "RegressionTree"
+  a <- c(rmse(training$y, training$pred_RegressionTree),rmse(testing$y, testing$pred_RegressionTree))
+  b <- c(mape(training$y, training$pred_RegressionTree),mape(testing$y, testing$pred_RegressionTree))
   c <- c(prod,model,a,b)
   d[i, ] = c
   
@@ -403,12 +403,12 @@ for(i in seq(1,length(dfs))){
   future <- make_future_dataframe(m, periods = ntest, freq = "week", include_history = TRUE)
   fcst <- predict(m, future)
   n<-nrow(training)
-  training$pred_prophet1<-fcst$yhat[1:n]
-  testing$pred_prophet1<-fcst$yhat[(n+1):(n+ntest)]
+  training$pred_Prophet1<-fcst$yhat[1:n]
+  testing$pred_Prophet1<-fcst$yhat[(n+1):(n+ntest)]
   
   model <- "Prophet1"
-  a <- c(rmse(training$y, training$pred_prophet1),rmse(testing$y, testing$pred_prophet1))
-  b <- c(mape(training$y, training$pred_prophet1),mape(testing$y, testing$pred_prophet1))
+  a <- c(rmse(training$y, training$pred_Prophet1),rmse(testing$y, testing$pred_Prophet1))
+  b <- c(mape(training$y, training$pred_Prophet1),mape(testing$y, testing$pred_Prophet1))
   c <- c(prod,model,a,b)
   d_prop1[i, ] = c
   
@@ -456,12 +456,12 @@ for(i in seq(1,length(dfs))){
 
   n<-nrow(training)
 
-  training$pred_prophet2<-fcst_h_r$yhat[1:n]
-  testing$pred_prophet2<-fcst_h_r$yhat[(n+1):(n+ntest)]
+  training$pred_Prophet2<-fcst_h_r$yhat[1:n]
+  testing$pred_Prophet2<-fcst_h_r$yhat[(n+1):(n+ntest)]
   
   model <- "Prophet2"
-  a <- c(rmse(training$y, training$pred_prophet2),rmse(testing$y, testing$pred_prophet2))
-  b <- c(mape(training$y, training$pred_prophet2),mape(testing$y, testing$pred_prophet2))
+  a <- c(rmse(training$y, training$pred_Prophet2),rmse(testing$y, testing$pred_Prophet2))
+  b <- c(mape(training$y, training$pred_Prophet2),mape(testing$y, testing$pred_Prophet2))
   c <- c(prod,model,a,b)
   d_prop2[i, ] = c
   
@@ -504,15 +504,15 @@ for(i in seq(1,length(dfs))){
   #importance=xgb.importance(colnames(X), model = fit.gbt)
   #xgb.ggplot.importance(importance)
   
-  training$pred_xgboost<-pred_gbt_train
-  testing$pred_xgboost<-pred_gbt_test
+  training$pred_XGBOOST<-pred_gbt_train
+  testing$pred_XGBOOST<-pred_gbt_test
   
-  c(rmse(training$y, training$pred_xgboost),rmse(testing$y, testing$pred_xgboost))
-  c(mape(training$y, training$pred_xgboost),mape(testing$y, testing$pred_xgboost))
+  c(rmse(training$y, training$pred_XGBOOST),rmse(testing$y, testing$pred_XGBOOST))
+  c(mape(training$y, training$pred_XGBOOST),mape(testing$y, testing$pred_XGBOOST))
   
   model <- "XGBOOST"
-  a <- c(rmse(training$y, training$pred_xgboost),rmse(testing$y, testing$pred_xgboost))
-  b <- c(mape(training$y, training$pred_xgboost),mape(testing$y, testing$pred_xgboost))
+  a <- c(rmse(training$y, training$pred_XGBOOST),rmse(testing$y, testing$pred_XGBOOST))
+  b <- c(mape(training$y, training$pred_XGBOOST),mape(testing$y, testing$pred_XGBOOST))
   c <- c(prod,model,a,b)
   d_xgboost[i, ] = c
   
@@ -639,7 +639,7 @@ for(i in seq(1,length(dfs))){
   training$pred_ProphetScoresRest<-mod$fitted.values[1:(len-ntest)]
   testing$pred_ProphetScoresRest<-mod$fitted.values[(len-ntest+1):len]
   
-  model <- "prophetScoresR"
+  model <- "ProphetScoresRest"
   a <- c(rmse(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]),
          rmse(sales[(len-ntest+1):len],mod$fitted.values[(len-ntest+1):len]))
   b <- c(mape(sales[1:(len-ntest)],mod$fitted.values[1:(len-ntest)]),
@@ -677,7 +677,29 @@ y.m.df %>%
 
 
 ```{r}
+best.models <-y.m.df %>%
+  group_by(prod) %>%
+  filter(mape_test == min(mape_test))%>%
+  select(prod, model)
 
+#head(prediction[[1]])
+
+best_data<-data.frame(date = rep(0,15))
+for(i in seq(1,length(dfs))){
+  y.name<-dfs[[i]]$article_name[1]
+  for(k in seq(1,length(best.models$prod))){
+    prediction_data<-prediction[[i]]
+    if (y.name == best.models$prod[k]){
+      
+      print(paste(y.name, best.models$model[k]))
+      name_pred_y<-paste("pred_", y.name, sep="")
+      name_pred_m<-paste("pred_", best.models$model[k], sep="")
+      best_data[,name_pred_y]<-prediction_data[, name_pred_m]
+      best_data$date <- prediction_data$ds
+    }
+  }
+}
+best_data
 ```
 
 
