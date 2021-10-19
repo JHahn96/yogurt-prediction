@@ -23,6 +23,13 @@ pred.data <-FALSE
 # list of all yogurts with own data frame for each yogurt
 dfs<-load.data.frames(keyword.vec, data.folder, pred.data)
 
+for (i in seq(1, length(dfs))){
+  xx<-dfs[[i]][,c(1:21)]
+  colnames(xx) <- xx %>%
+    colnames(.) %>%
+    gsub(".x", "", .)
+  dfs[[i]]<-xx
+  }
 ```
 
 ## Describe the dependent variable: waiting times and some of the key predictors
@@ -200,7 +207,7 @@ prediction <- list()
 ## Loop over each yogurt and apply data on each model
 
 for(i in seq(1,length(dfs))){
-  
+  print(i)
   ## replace Null values
   dfs[[i]][is.na(dfs[[i]])] <- 0
   
@@ -434,15 +441,15 @@ for(i in seq(1,length(dfs))){
   future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
 
   ## ad actual values to the prediction
-  future$promo_01<- AL[,c("promo_01")]
-  future$promo_02<- AL[,c("promo_02")]
-  future$promo_03<- AL[,c("promo_03")]
-  future$promo_04<- AL[,c("promo_04")]
-  future$promo_05<- AL[,c("promo_05")]
-  future$pred.joghurt<- AL[,c("pred.joghurt")]
-  future$pred.gesund<- AL[,c("pred.gesund")]
-  future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
-  future$pred.milk.price<- AL[,c("pred.milk.price")]
+  future$promo_01<- AL$promo_01
+  future$promo_02<- AL$promo_02
+  future$promo_03<- AL$promo_03
+  future$promo_04<- AL$promo_04
+  future$promo_05<- AL$promo_05
+  future$pred.joghurt<- AL$pred.joghurt
+  future$pred.gesund<- AL$pred.gesund
+  future$pred.joghurt.price<- AL$pred.joghurt.price
+  future$pred.milk.price<- AL$pred.milk.price 
   
   ## predict
   fcst_h_r <- predict(m_h_r, future)
@@ -533,10 +540,10 @@ for(i in seq(1,length(dfs))){
   m_h_r <- add_regressor(m_h_r, 'promo_03')
   m_h_r <- add_regressor(m_h_r, "promo_04")
   m_h_r <- add_regressor(m_h_r, 'promo_05')
-  #m_h_r <- add_regressor(m_h_r, "pred.joghurt")
-  #m_h_r <- add_regressor(m_h_r, "pred.gesund")
-  #m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
-  #m_h_r <- add_regressor(m_h_r, "pred.milk.price")
+  m_h_r <- add_regressor(m_h_r, "pred.joghurt")
+  m_h_r <- add_regressor(m_h_r, "pred.gesund")
+  m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
+  m_h_r <- add_regressor(m_h_r, "pred.milk.price")
   m_h_r <- fit.prophet(m_h_r, training)
   
   future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
@@ -546,10 +553,10 @@ for(i in seq(1,length(dfs))){
   future$promo_03<- AL[,c("promo_03")]
   future$promo_04<- AL[,c("promo_04")]
   future$promo_05<- AL[,c("promo_05")]
-  #future$pred.joghurt<- AL[,c("pred.joghurt")]
-  #future$pred.gesund<- AL[,c("pred.gesund")]
-  #future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
-  #future$pred.milk.price<- AL[,c("pred.milk.price")]
+  future$pred.joghurt<- AL[,c("pred.joghurt")]
+  future$pred.gesund<- AL[,c("pred.gesund")]
+  future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
+  future$pred.milk.price<- AL[,c("pred.milk.price")]
   
   fcst_h_r <- predict(m_h_r, future)
   
@@ -598,10 +605,10 @@ for(i in seq(1,length(dfs))){
   m_h_r <- add_regressor(m_h_r, 'promo_03')
   m_h_r <- add_regressor(m_h_r, "promo_04")
   m_h_r <- add_regressor(m_h_r, 'promo_05')
-  #m_h_r <- add_regressor(m_h_r, "pred.joghurt")
-  #m_h_r <- add_regressor(m_h_r, "pred.gesund")
-  #m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
-  #m_h_r <- add_regressor(m_h_r, "pred.milk.price")
+  m_h_r <- add_regressor(m_h_r, "pred.joghurt")
+  m_h_r <- add_regressor(m_h_r, "pred.gesund")
+  m_h_r <- add_regressor(m_h_r, "pred.joghurt.price")
+  m_h_r <- add_regressor(m_h_r, "pred.milk.price")
   m_h_r <- fit.prophet(m_h_r, training)
   
   future <- make_future_dataframe(m_h_r, periods = ntest, freq = "week", include_history = TRUE)
@@ -611,10 +618,10 @@ for(i in seq(1,length(dfs))){
   future$promo_03<- AL[,c("promo_03")]
   future$promo_04<- AL[,c("promo_04")]
   future$promo_05<- AL[,c("promo_05")]
-  #future$pred.joghurt<- AL[,c("pred.joghurt")]
-  #future$pred.gesund<- AL[,c("pred.gesund")]
-  #future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
-  #future$pred.milk.price<- AL[,c("pred.milk.price")]
+  future$pred.joghurt<- AL[,c("pred.joghurt")]
+  future$pred.gesund<- AL[,c("pred.gesund")]
+  future$pred.joghurt.price<- AL[,c("pred.joghurt.price")]
+  future$pred.milk.price<- AL[,c("pred.milk.price")]
   
   fcst_h_r <- predict(m_h_r, future)
   
@@ -715,7 +722,7 @@ for(i in seq(1,length(prediction))){
     geom_line() +
     facet_wrap(~variable, ncol=2, labeller = as_labeller(model_names))+
     theme(axis.text = element_text(size=5), axis.title = element_text(size=6)) +
-    labs(title=paste(c("Modelcomparison of ", yogurt, ", with MAPE Statistics."), collapse="",sep=""),  
+    labs(title=paste(c("Modelcomparison of ", yogurt), collapse="",sep=""),  
          x="Time", y="Yogurt Sales")#+ 
     #theme(legend.position = "none")
   print(g1)

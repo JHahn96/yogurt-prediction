@@ -99,7 +99,7 @@ load.data.frames<-function(keyword.vec, data.folder, pred.data){
   
   
   for (i in 1:length(ldf)){
-    i<-1
+    #i<-1
     ## get the gtrends data
     gtrends<-df %>%
       select(c("yrwk_start", "article_name"),gsub(" ", ".", keyword.vec))
@@ -196,8 +196,8 @@ read.milk.data<-function(){
   return(milk)
 }
 
-df_yogurt<-ldf[i]
-df_all<-df
+#df_yogurt<-ldf[i]
+#df_all<-df
 #df_yogurt<-df.cat
 #df_all<-df.cat
 calc_mclassi_rest<-function(df_yogurt, df_all){
